@@ -58,13 +58,11 @@ export function DashboardView({
   }, []);
 
   const filteredMetrics = useMemo(() => {
-    // Touch leads.length so the hook properly tracks lead array updates
-    if (leads.length < 0) return leadService.getDashboardMetrics();
     const filters: LeadFilters = {
       source: sourceFilter,
       dateRange: dateFilter,
     };
-    return leadService.getDashboardMetrics(filters);
+    return leadService.calculateMetrics(leads, filters);
   }, [leads, sourceFilter, dateFilter]);
 
   // Due / Overdue follow-ups

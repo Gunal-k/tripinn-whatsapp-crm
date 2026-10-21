@@ -1,68 +1,169 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Compass, ShieldCheck, Lock, Mail, ArrowRight, PhoneCall } from 'lucide-react';
+import React, { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { 
+  Compass, 
+  Lock, 
+  Mail, 
+  Eye, 
+  EyeOff, 
+  ArrowRight, 
+  AlertCircle, 
+  CheckCircle2, 
+  KeyRound, 
+  ArrowLeft,
+  ShieldAlert
+} from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Mode: 'login' | 'forgot_password'
+  const [mode, setMode] = useState<'login' | 'forgot_password'>('login');
+
+  // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
+  // Status messages
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Derive initial status messages from URL query parameters
+  const errorParam = searchParams.get('error');
+  const resetParam = searchParams.get('reset');
+
+  const urlErrorMessage = errorParam === 'inactive'
+    ? 'Access Denied: Your staff account is deactivated. Please contact your Tripinn administrator.'
+    : errorParam === 'profile_missing'
+    ? 'Access Denied: Staff profile record not found. Please contact your administrator.'
+    : errorParam === 'unauthorized'
+    ? 'Please sign in to access the Tripinn Holidays CRM workspace.'
+    : '';
+
+  const urlSuccessMessage = resetParam === 'success'
+    ? 'Password updated successfully! Please sign in with your new password.'
+    : '';
+
+  const displayError = errorMessage || urlErrorMessage;
+  const displaySuccess = successMessage || urlSuccessMessage;
+
+  // Handle Supabase Email & Password Sign In
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage('');
+    setSuccessMessage('');
 
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+
+      // 1. Authenticate with Supabase Auth
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
         password,
       });
 
-      if (error) {
-        // Fallback for dev demo mode if Supabase keys haven't been populated with users yet
-        if (email.toLowerCase().includes('admin')) {
-          localStorage.setItem('tripinn_current_role', 'admin');
-          localStorage.setItem('tripinn_user_email', email);
-          localStorage.setItem('tripinn_user_name', 'Karan Johar (Admin)');
-          router.push('/');
-          return;
+      if (authError) {
+        if (authError.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMessage('Invalid email address or password. Please verify your staff credentials.');
+        } else if (authError.message.toLowerCase().includes('email not confirmed')) {
+          setErrorMessage('Email address is not confirmed. Please verify your email or ask an administrator to confirm your account.');
         } else {
-          localStorage.setItem('tripinn_current_role', 'salesperson');
-          localStorage.setItem('tripinn_user_email', email);
-          localStorage.setItem('tripinn_user_name', 'Priya Sharma');
-          router.push('/');
-          return;
+          setErrorMessage(authError.message || 'Authentication failed. Please try again.');
         }
+        return;
       }
 
-      if (data?.user) {
-        router.push('/');
+      if (!data.user) {
+        setErrorMessage('Authentication failed: No user record returned.');
+        return;
       }
+
+      // 2. Verify Profile in public.profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, is_active')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        await supabase.auth.signOut();
+        setErrorMessage(`Database verification error: ${profileError.message}`);
+        return;
+      }
+
+      // 3. Deny access if profile record does not exist
+      if (!profile) {
+        await supabase.auth.signOut();
+        setErrorMessage(
+          'Access Denied: No staff profile record exists for this account in public.profiles. Please contact your administrator to provision your profile.'
+        );
+        return;
+      }
+
+      // 4. Deny access if staff member is marked inactive
+      if (!profile.is_active) {
+        await supabase.auth.signOut();
+        setErrorMessage(
+          'Access Denied: Your staff account has been deactivated. Please contact your Tripinn administrator.'
+        );
+        return;
+      }
+
+      // 5. Successful login: Route to intended page or dashboard
+      const nextPath = searchParams.get('next') || '/';
+      router.push(nextPath);
+      router.refresh();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Authentication failed';
+      const message = err instanceof Error ? err.message : 'Unable to connect to authentication server.';
       setErrorMessage(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickLogin = (role: 'admin' | 'salesperson') => {
-    if (role === 'admin') {
-      localStorage.setItem('tripinn_current_role', 'admin');
-      localStorage.setItem('tripinn_user_email', 'admin@tripinnholidays.com');
-      localStorage.setItem('tripinn_user_name', 'Karan Johar (Admin)');
-    } else {
-      localStorage.setItem('tripinn_current_role', 'salesperson');
-      localStorage.setItem('tripinn_user_email', 'priya@tripinnholidays.com');
-      localStorage.setItem('tripinn_user_name', 'Priya Sharma');
+  // Handle Supabase Password Reset Request
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !email.trim()) {
+      setErrorMessage('Please enter your registered staff email address.');
+      return;
     }
-    router.push('/');
+
+    setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      const supabase = createClient();
+      const redirectUrl = typeof window !== 'undefined' 
+        ? `${window.location.origin}/auth/reset-password`
+        : undefined;
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl,
+      });
+
+      if (resetError) {
+        setErrorMessage(resetError.message || 'Unable to send password reset request.');
+        return;
+      }
+
+      setSuccessMessage(
+        `Password reset instructions sent to ${email.trim()}. Please check your email inbox to set a new password.`
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send password reset email.';
+      setErrorMessage(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -74,100 +175,187 @@ export default function LoginPage() {
             <Compass className="w-8 h-8 text-[#070d1a]" />
           </div>
           <h1 className="text-xl font-bold tracking-wider text-white">TRIPINN HOLIDAYS</h1>
-          <p className="text-xs text-slate-400">Enterprise Travel CRM &amp; Telecalling Portal</p>
+          <p className="text-xs text-slate-400">
+            {mode === 'login' 
+              ? 'Enterprise Travel CRM & Telecalling Portal' 
+              : 'Password Recovery Assistance'}
+          </p>
         </div>
 
-        {/* Error Alert */}
-        {errorMessage && (
-          <div className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
-            {errorMessage}
+        {/* Error Alert Banner */}
+        {displayError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start space-x-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <div className="flex-1 leading-relaxed">{displayError}</div>
           </div>
         )}
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Staff Email Address
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                required
-                placeholder="staff@tripinnholidays.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+        {/* Success Alert Banner */}
+        {displaySuccess && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-start space-x-2.5">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+            <div className="flex-1 leading-relaxed">{displaySuccess}</div>
           </div>
+        )}
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Account Password
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 cursor-pointer"
-          >
-            <span>{loading ? 'Authenticating...' : 'Sign In to Workspace'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </form>
-
-        {/* Quick Role-Selection Demo Buttons */}
-        <div className="pt-4 border-t border-[#1e293b] space-y-2">
-          <p className="text-[11px] text-center text-slate-400 font-semibold uppercase tracking-wider">
-            Quick Role Switcher &amp; Staff Access
-          </p>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('admin')}
-              className="p-2.5 rounded-xl bg-[#070d1a] hover:bg-[#111d3d] border border-emerald-500/30 text-left transition cursor-pointer"
-            >
-              <div className="flex items-center space-x-1 text-emerald-400 text-xs font-bold mb-0.5">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Administrator</span>
+        {/* LOGIN FORM */}
+        {mode === 'login' ? (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Staff Email Address
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="staff@tripinnholidays.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                />
               </div>
-              <p className="text-[10px] text-slate-400">Full Access &amp; API Settings</p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Account Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                    setMode('forgot_password');
+                  }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-9 pr-10 py-2.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 cursor-pointer mt-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-[#070d1a]/30 border-t-[#070d1a] rounded-full animate-spin" />
+                  <span>Verifying credentials...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Workspace</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          /* FORGOT PASSWORD FORM */
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="p-3 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-400 leading-relaxed">
+              Enter your registered staff email address below. We will send you a secure link to reset your password.
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Staff Email Address
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="staff@tripinnholidays.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-[#070d1a]/30 border-t-[#070d1a] rounded-full animate-spin" />
+                  <span>Sending reset link...</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4" />
+                  <span>Send Password Reset Link</span>
+                </>
+              )}
             </button>
 
             <button
               type="button"
-              onClick={() => handleQuickLogin('salesperson')}
-              className="p-2.5 rounded-xl bg-[#070d1a] hover:bg-[#111d3d] border border-blue-500/30 text-left transition cursor-pointer"
+              onClick={() => {
+                setErrorMessage('');
+                setSuccessMessage('');
+                setMode('login');
+              }}
+              className="w-full py-2 rounded-lg bg-transparent hover:bg-slate-800/50 text-slate-400 hover:text-white text-xs font-semibold transition flex items-center justify-center space-x-1 cursor-pointer"
             >
-              <div className="flex items-center space-x-1 text-blue-400 text-xs font-bold mb-0.5">
-                <PhoneCall className="w-3.5 h-3.5" />
-                <span>Telecaller / Rep</span>
-              </div>
-              <p className="text-[10px] text-slate-400">Calling Queue &amp; Leads</p>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Sign In</span>
             </button>
-          </div>
+          </form>
+        )}
+
+        {/* Security & Access Notice */}
+        <div className="pt-4 border-t border-[#1e293b] flex items-center justify-center space-x-2 text-[10px] text-slate-500 text-center leading-relaxed">
+          <ShieldAlert className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <span>
+            Authorized personnel only. Public registration is disabled to protect client data.
+          </span>
         </div>
-
-        {/* Security Notice */}
-        <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-          Authorized personnel only. Public registration is disabled to safeguard customer data and Meta CAPI endpoints.
-        </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#070d1a] flex items-center justify-center text-emerald-400">
+          <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

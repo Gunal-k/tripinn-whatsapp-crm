@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Award, 
@@ -11,7 +11,7 @@ import {
   Sparkles,
   Send
 } from 'lucide-react';
-import { Lead, LeadPipelineStage } from '../../lib/types/crm';
+import { Lead, LeadPipelineStage, LeadActivity, WhatsAppMessage } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
 
@@ -44,20 +44,41 @@ export function LeadDetailDialog({
   // Follow-up editing state
   const [followUpDateInput, setFollowUpDateInput] = useState('');
   const [followUpNotesInput, setFollowUpNotesInput] = useState('');
-  const [editingFollowUpLeadId, setEditingFollowUpLeadId] = useState<string | null>(null);
+
+  const [activities, setActivities] = useState<LeadActivity[]>([]);
+  const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    if (!lead?.id) return;
+    let active = true;
+
+    const timer = setTimeout(() => {
+      setFollowUpDateInput(lead.follow_up_date || '');
+      setFollowUpNotesInput(lead.follow_up_notes || '');
+      setLoadingDetails(true);
+
+      Promise.all([
+        leadService.getLeadActivities(lead.id),
+        leadService.getLeadMessages(lead.id),
+      ]).then(([acts, msgs]) => {
+        if (active) {
+          setActivities(acts);
+          setMessages(msgs);
+          setLoadingDetails(false);
+        }
+      }).catch(() => {
+        if (active) setLoadingDetails(false);
+      });
+    }, 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [lead?.id, lead?.follow_up_date, lead?.follow_up_notes, lead?.updated_at]);
 
   if (!isOpen || !lead) return null;
-
-  // Initialize or update follow-up inputs when lead changes
-  if (editingFollowUpLeadId !== lead.id) {
-    setEditingFollowUpLeadId(lead.id);
-    setFollowUpDateInput(lead.follow_up_date || '');
-    setFollowUpNotesInput(lead.follow_up_notes || '');
-  }
-
-  // Derive activities and messages directly
-  const activities = leadService.getLeadActivities(lead.id);
-  const messages = leadService.getLeadMessages(lead.id);
 
   const pipelineStages: LeadPipelineStage[] = [
     'NEW',
@@ -70,18 +91,20 @@ export function LeadDetailDialog({
     'LOST',
   ];
 
-  const handleStageChange = (newStage: LeadPipelineStage) => {
+  const handleStageChange = async (newStage: LeadPipelineStage) => {
     if (newStage === 'QUALIFIED' && lead.qualification_status !== 'QUALIFIED') {
       setShowQualifyBox(true);
       return;
     }
-    const updated = leadService.updateLeadStatus(lead.id, newStage);
+    const updated = await leadService.updateLeadStatus(lead.id, newStage);
     if (updated) {
       onLeadUpdated(updated);
+      const acts = await leadService.getLeadActivities(lead.id);
+      setActivities(acts);
     }
   };
 
-  const handleExplicitQualify = (e: React.FormEvent) => {
+  const handleExplicitQualify = async (e: React.FormEvent) => {
     e.preventDefault();
     setQualifyError('');
 
@@ -95,29 +118,37 @@ export function LeadDetailDialog({
       return;
     }
 
-    const res = leadService.qualifyLead(lead.id, qualifyCriteria);
+    const res = await leadService.qualifyLead(lead.id, qualifyCriteria);
     if (res.success && res.lead) {
       onLeadUpdated(res.lead);
       setShowQualifyBox(false);
+      const acts = await leadService.getLeadActivities(lead.id);
+      setActivities(acts);
     } else {
       setQualifyError(res.message);
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessageText.trim()) return;
 
-    leadService.sendWhatsAppMessage(lead.id, newMessageText.trim());
+    await leadService.sendWhatsAppMessage(lead.id, newMessageText.trim());
     setNewMessageText('');
+    const refreshedMsgs = await leadService.getLeadMessages(lead.id);
+    const refreshedActs = await leadService.getLeadActivities(lead.id);
+    setMessages(refreshedMsgs);
+    setActivities(refreshedActs);
     onLeadUpdated({ ...lead, updated_at: new Date().toISOString() });
   };
 
-  const handleSaveFollowUp = () => {
-    const updated = leadService.scheduleFollowUp(lead.id, followUpDateInput, followUpNotesInput);
+  const handleSaveFollowUp = async () => {
+    const updated = await leadService.scheduleFollowUp(lead.id, followUpDateInput, followUpNotesInput);
     if (updated) {
       onLeadUpdated(updated);
-      alert('Follow-up scheduled successfully!');
+      const acts = await leadService.getLeadActivities(lead.id);
+      setActivities(acts);
+      alert('Follow-up scheduled successfully in database!');
     }
   };
 
@@ -297,9 +328,13 @@ export function LeadDetailDialog({
           >
             <MessageSquare className="w-3.5 h-3.5" />
             <span>WhatsApp Chat</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400">
-              {messages.length}
-            </span>
+            {loadingDetails ? (
+              <div className="w-2.5 h-2.5 border border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400">
+                {messages.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -312,9 +347,13 @@ export function LeadDetailDialog({
           >
             <History className="w-3.5 h-3.5" />
             <span>Activity Timeline</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
-              {activities.length}
-            </span>
+            {loadingDetails ? (
+              <div className="w-2.5 h-2.5 border border-slate-400/40 border-t-slate-400 rounded-full animate-spin" />
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
+                {activities.length}
+              </span>
+            )}
           </button>
         </div>
 

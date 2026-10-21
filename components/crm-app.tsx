@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar, NavigationTab } from './layout/sidebar';
 import { TopNav } from './layout/top-nav';
 import { DashboardView } from './dashboard/dashboard-view';
@@ -12,13 +13,16 @@ import { AddLeadModal } from './leads/add-lead-modal';
 import { LeadDetailDialog } from './leads/lead-detail-dialog';
 import { TelecallerExportModal } from './telecaller/telecaller-export-modal';
 import { Lead } from '../lib/types/crm';
-import { leadService } from '../lib/services/leads';
+import { leadService, isSupabaseConfigured, isTestEnvironment } from '../lib/services/leads';
+import { createClient } from '../lib/supabase/client';
 
 export default function CRMApp() {
+  const router = useRouter();
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
-  const [currentRole, setCurrentRole] = useState<'admin' | 'salesperson'>('admin');
-  const [currentUserName, setCurrentUserName] = useState<string>('Karan Johar (Admin)');
-  const [leads, setLeads] = useState<Lead[]>(() => leadService.getLeads());
+  const [currentRole, setCurrentRole] = useState<'admin' | 'sales'>('admin');
+  const [currentUserName, setCurrentUserName] = useState<string>('Staff User');
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState<boolean>(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isTelecallerExportOpen, setIsTelecallerExportOpen] = useState(false);
@@ -26,47 +30,112 @@ export default function CRMApp() {
   const [statusFilterForLeads, setStatusFilterForLeads] = useState<string | undefined>(undefined);
   const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const storedRole = localStorage.getItem('tripinn_current_role') as 'admin' | 'salesperson';
-        const storedName = localStorage.getItem('tripinn_user_name');
-        if (storedRole) {
-          setCurrentRole(storedRole);
-          setCurrentUserName(storedName || (storedRole === 'admin' ? 'Karan Johar (Admin)' : 'Priya Sharma'));
-        }
-      } catch {
-        // ignore
-      }
-      setIsMounted(true);
-    }, 0);
-    return () => clearTimeout(timer);
+  const fetchLeads = useCallback(async () => {
+    try {
+      const data = await leadService.getLeads();
+      setLeads(data);
+    } catch (err) {
+      console.warn('Could not load leads from database:', err);
+    } finally {
+      setLoadingLeads(false);
+    }
   }, []);
 
-  const toggleRole = () => {
-    if (currentRole === 'admin') {
-      setCurrentRole('salesperson');
-      setCurrentUserName('Priya Sharma');
-      localStorage.setItem('tripinn_current_role', 'salesperson');
-      localStorage.setItem('tripinn_user_name', 'Priya Sharma');
-      if (currentTab === 'settings') {
-        setCurrentTab('dashboard');
-      }
-    } else {
-      setCurrentRole('admin');
-      setCurrentUserName('Karan Johar (Admin)');
-      localStorage.setItem('tripinn_current_role', 'admin');
-      localStorage.setItem('tripinn_user_name', 'Karan Johar (Admin)');
-    }
-  };
+  useEffect(() => {
+    let isSubscribed = true;
 
-  // Refresh lead state when actions occur
-  const refreshLeads = () => {
-    const all = leadService.getLeads();
-    setLeads([...all]);
-    if (selectedLead) {
-      const refreshedSelected = leadService.getLeadById(selectedLead.id);
-      setSelectedLead(refreshedSelected);
+    async function initSessionAndLeads() {
+      // In test mode or unconfigured dev environments, allow mock capability
+      if (isTestEnvironment() || !isSupabaseConfigured()) {
+        try {
+          const storedRole = typeof window !== 'undefined' ? localStorage.getItem('tripinn_current_role') : null;
+          const storedName = typeof window !== 'undefined' ? localStorage.getItem('tripinn_user_name') : null;
+          if (storedRole) {
+            const normalized = storedRole === 'admin' ? 'admin' : 'sales';
+            if (isSubscribed) {
+              setCurrentRole(normalized);
+              setCurrentUserName(storedName || (normalized === 'admin' ? 'Karan Johar (Admin)' : 'Priya Sharma'));
+            }
+          }
+        } catch {
+          // ignore
+        }
+        if (isSubscribed) {
+          setIsMounted(true);
+          await fetchLeads();
+        }
+        return;
+      }
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          router.push('/login');
+          return;
+        }
+
+        // Fetch verified profile from public.profiles
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, is_active')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError || !profile || !profile.is_active) {
+          await supabase.auth.signOut();
+          router.push('/login?error=inactive');
+          return;
+        }
+
+        if (isSubscribed) {
+          const verifiedRole: 'admin' | 'sales' = profile.role === 'admin' ? 'admin' : 'sales';
+          setCurrentRole(verifiedRole);
+          setCurrentUserName(profile.full_name || user.email?.split('@')[0] || 'Staff User');
+        }
+      } catch (err) {
+        console.warn('Session verification error:', err);
+      } finally {
+        if (isSubscribed) {
+          setIsMounted(true);
+          await fetchLeads();
+        }
+      }
+    }
+
+    initSessionAndLeads();
+
+    // Listen to Supabase auth state changes (e.g. sign out from another tab)
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || (!session && !isTestEnvironment() && isSupabaseConfigured())) {
+        router.push('/login');
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchLeads, router]);
+
+  // Refresh lead state asynchronously when actions occur
+  const refreshLeads = async () => {
+    try {
+      const all = await leadService.getLeads();
+      setLeads([...all]);
+      if (selectedLead) {
+        const refreshedSelected = await leadService.getLeadById(selectedLead.id);
+        setSelectedLead(refreshedSelected);
+      }
+    } catch (err) {
+      console.error('Failed to refresh leads from database:', err);
     }
   };
 
@@ -124,7 +193,6 @@ export default function CRMApp() {
         unreadMessagesCount={2}
         currentRole={currentRole}
         currentUserName={currentUserName}
-        onToggleRole={toggleRole}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
@@ -143,45 +211,54 @@ export default function CRMApp() {
 
         {/* Scrollable View Container */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-          {currentTab === 'dashboard' && (
-            <DashboardView
-              leads={leads}
-              onSelectLead={handleOpenLeadDetail}
-              onNavigateToLeads={handleNavigateToLeads}
-              onNavigateToFollowUps={handleNavigateToFollowUps}
-              onRefresh={refreshLeads}
-            />
-          )}
+          {loadingLeads && leads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
+              <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+              <p className="text-xs font-medium">Connecting to Supabase PostgreSQL database...</p>
+            </div>
+          ) : (
+            <>
+              {currentTab === 'dashboard' && (
+                <DashboardView
+                  leads={leads}
+                  onSelectLead={handleOpenLeadDetail}
+                  onNavigateToLeads={handleNavigateToLeads}
+                  onNavigateToFollowUps={handleNavigateToFollowUps}
+                  onRefresh={refreshLeads}
+                />
+              )}
 
-          {currentTab === 'leads' && (
-            <LeadsView
-              leads={leads}
-              onSelectLead={handleOpenLeadDetail}
-              onOpenAddModal={() => setIsAddModalOpen(true)}
-              onRefresh={refreshLeads}
-              initialStatusFilter={statusFilterForLeads}
-              currentRole={currentRole}
-              currentUserName={currentUserName}
-            />
-          )}
+              {currentTab === 'leads' && (
+                <LeadsView
+                  leads={leads}
+                  onSelectLead={handleOpenLeadDetail}
+                  onOpenAddModal={() => setIsAddModalOpen(true)}
+                  onRefresh={refreshLeads}
+                  initialStatusFilter={statusFilterForLeads}
+                  currentRole={currentRole}
+                  currentUserName={currentUserName}
+                />
+              )}
 
-          {currentTab === 'follow-ups' && (
-            <FollowUpsView
-              leads={leads}
-              onSelectLead={handleOpenLeadDetail}
-              onRefresh={refreshLeads}
-            />
-          )}
+              {currentTab === 'follow-ups' && (
+                <FollowUpsView
+                  leads={leads}
+                  onSelectLead={handleOpenLeadDetail}
+                  onRefresh={refreshLeads}
+                />
+              )}
 
-          {currentTab === 'messages' && (
-            <MessagesView
-              leads={leads}
-              onSelectLead={handleOpenLeadDetail}
-              onRefresh={refreshLeads}
-            />
-          )}
+              {currentTab === 'messages' && (
+                <MessagesView
+                  leads={leads}
+                  onSelectLead={handleOpenLeadDetail}
+                  onRefresh={refreshLeads}
+                />
+              )}
 
-          {currentTab === 'settings' && currentRole === 'admin' && <SettingsView />}
+              {currentTab === 'settings' && currentRole === 'admin' && <SettingsView />}
+            </>
+          )}
         </main>
       </div>
 

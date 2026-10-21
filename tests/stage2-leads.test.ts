@@ -1,3 +1,5 @@
+Object.assign(process.env, { NODE_ENV: 'test' });
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhoneNumber, isValidInternationalPhone, formatPhoneDisplay } from '../lib/utils/phone';
@@ -50,8 +52,8 @@ test('Lead schema validation tests', async (t) => {
 });
 
 test('Lead service management & duplicate detection tests', async (t) => {
-  await t.test('creates new lead and verifies attributes', () => {
-    const { lead, duplicateFound } = leadService.createLead({
+  await t.test('creates new lead and verifies attributes', async () => {
+    const { lead, duplicateFound } = await leadService.createLead({
       name: 'Test Customer A',
       phone: '+91 9999000011',
       lead_source: 'WhatsApp',
@@ -66,14 +68,14 @@ test('Lead service management & duplicate detection tests', async (t) => {
     assert.equal(lead.phone, '919999000011');
   });
 
-  await t.test('detects duplicate phone number', () => {
-    const dupCheck = leadService.checkDuplicatePhone('+91 9999 000011');
+  await t.test('detects duplicate phone number', async () => {
+    const dupCheck = await leadService.checkDuplicatePhone('+91 9999 000011');
     assert.ok(dupCheck !== null);
     assert.equal(dupCheck?.name, 'Test Customer A');
   });
 
-  await t.test('explicitly qualifies lead when criteria is met', () => {
-    const { lead } = leadService.createLead({
+  await t.test('explicitly qualifies lead when criteria is met', async () => {
+    const { lead } = await leadService.createLead({
       name: 'Aditi Rao',
       phone: '+91 9999000022',
       lead_source: 'Facebook',
@@ -81,7 +83,7 @@ test('Lead service management & duplicate detection tests', async (t) => {
     });
 
     // Attempt qualification without verified budget should fail
-    const failedAttempt = leadService.qualifyLead(lead.id, {
+    const failedAttempt = await leadService.qualifyLead(lead.id, {
       verifiedTravelDates: true,
       verifiedBudget: false,
       verifiedTravelers: true,
@@ -90,7 +92,7 @@ test('Lead service management & duplicate detection tests', async (t) => {
     assert.equal(failedAttempt.success, false);
 
     // Full qualification with verified criteria
-    const qualifiedResult = leadService.qualifyLead(lead.id, {
+    const qualifiedResult = await leadService.qualifyLead(lead.id, {
       verifiedTravelDates: true,
       verifiedBudget: true,
       verifiedTravelers: true,
@@ -103,23 +105,23 @@ test('Lead service management & duplicate detection tests', async (t) => {
     assert.equal(qualifiedResult.metaCapiTriggered, true); // Triggers Meta CAPI because ctwa_clid exists
   });
 
-  await t.test('schedules and completes follow-ups', () => {
-    const { lead } = leadService.createLead({
+  await t.test('schedules and completes follow-ups', async () => {
+    const { lead } = await leadService.createLead({
       name: 'Tarun Verma',
       phone: '+91 9999000033',
       lead_source: 'manual',
     });
 
-    const scheduled = leadService.scheduleFollowUp(lead.id, '2026-11-01T10:00:00Z', 'Discuss flight tickets');
+    const scheduled = await leadService.scheduleFollowUp(lead.id, '2026-11-01T10:00:00Z', 'Discuss flight tickets');
     assert.equal(scheduled?.follow_up_completed, false);
     assert.equal(scheduled?.follow_up_notes, 'Discuss flight tickets');
 
-    const completed = leadService.completeFollowUp(lead.id);
+    const completed = await leadService.completeFollowUp(lead.id);
     assert.equal(completed?.follow_up_completed, true);
   });
 
-  await t.test('exports leads to valid CSV format', () => {
-    const sampleLeads = leadService.getLeads();
+  await t.test('exports leads to valid CSV format', async () => {
+    const sampleLeads = await leadService.getLeads();
     const csv = leadService.exportToCsv(sampleLeads);
     assert.ok(csv.includes('Lead ID,Customer Name,Phone'));
     assert.ok(csv.includes('919820123456'));

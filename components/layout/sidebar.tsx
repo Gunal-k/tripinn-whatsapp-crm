@@ -12,8 +12,7 @@ import {
   LogOut,
   Sparkles,
   PhoneCall,
-  ShieldCheck,
-  RefreshCw
+  ShieldCheck
 } from 'lucide-react';
 
 export type NavigationTab = 'dashboard' | 'leads' | 'follow-ups' | 'messages' | 'settings';
@@ -23,9 +22,9 @@ interface SidebarProps {
   onSelectTab: (tab: NavigationTab) => void;
   followUpsCount: number;
   unreadMessagesCount: number;
-  currentRole: 'admin' | 'salesperson';
+  currentRole: 'admin' | 'sales';
   currentUserName: string;
-  onToggleRole: () => void;
+  onToggleRole?: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -37,7 +36,6 @@ export function Sidebar({
   unreadMessagesCount,
   currentRole,
   currentUserName,
-  onToggleRole,
   isMobileOpen = false,
   onCloseMobile,
 }: SidebarProps) {
@@ -136,14 +134,9 @@ export function Sidebar({
             </span>
           </div>
 
-          <button
-            onClick={onToggleRole}
-            className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold px-2 py-0.5 rounded bg-[#111d3d] border border-emerald-500/30 flex items-center space-x-1 cursor-pointer transition"
-            title="Switch View to test Administrator vs Telecaller role screen optimization"
-          >
-            <RefreshCw className="w-2.5 h-2.5" />
-            <span>Switch</span>
-          </button>
+          <div className="text-[10px] text-emerald-400/80 font-mono px-2 py-0.5 rounded bg-[#111d3d] border border-emerald-500/20">
+            Active
+          </div>
         </div>
 
         {/* Navigation Items */}
@@ -201,12 +194,18 @@ export function Sidebar({
         <div className="p-4 border-t border-[#1e293b] flex items-center justify-between bg-[#070d1a]/50">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-full bg-slate-700 border border-emerald-500/40 flex items-center justify-center font-bold text-xs text-white">
-              {currentRole === 'admin' ? 'KJ' : 'PS'}
+              {currentUserName
+                .split(' ')
+                .map((n) => n[0])
+                .filter(Boolean)
+                .slice(0, 2)
+                .join('')
+                .toUpperCase() || (currentRole === 'admin' ? 'AD' : 'SL')}
             </div>
             <div className="text-left">
               <div className="flex items-center space-x-1">
-                <span className="text-xs font-semibold text-white">{currentUserName}</span>
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span className="text-xs font-semibold text-white truncate max-w-[120px]">{currentUserName}</span>
+                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
               </div>
               <p className="text-[10px] text-emerald-400/90 font-medium">
                 {currentRole === 'admin' ? 'System Administrator' : 'Senior Telecaller / Rep'}
@@ -217,9 +216,18 @@ export function Sidebar({
           <button 
             title="Sign Out"
             className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-            onClick={() => {
-              if (confirm('Are you sure you want to log out?')) {
+            onClick={async () => {
+              const confirmed = window.confirm('Are you sure you want to sign out of Tripinn CRM?');
+              if (!confirmed) return;
+              try {
+                const { createClient } = await import('../../lib/supabase/client');
+                const supabase = createClient();
+                await supabase.auth.signOut();
+              } catch (err) {
+                console.warn('Sign out error:', err);
+              } finally {
                 router.push('/login');
+                router.refresh();
               }
             }}
           >

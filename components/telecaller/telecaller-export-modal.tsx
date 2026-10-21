@@ -9,7 +9,7 @@ interface TelecallerExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   leads: Lead[];
-  currentRole: 'admin' | 'salesperson';
+  currentRole: 'admin' | 'sales';
   currentUserName?: string;
 }
 
@@ -20,9 +20,9 @@ export function TelecallerExportModal({
   currentRole,
   currentUserName = 'Priya Sharma',
 }: TelecallerExportModalProps) {
-  // If salesperson, default to their own leads; if admin, default to ALL
+  // If sales, default to their own leads; if admin, default to ALL
   const [selectedTelecaller, setSelectedTelecaller] = useState<string>(
-    currentRole === 'salesperson' ? currentUserName : 'ALL'
+    currentRole === 'sales' ? currentUserName : 'ALL'
   );
   const [selectedStage, setSelectedStage] = useState<string>('ALL');
 
@@ -94,7 +94,7 @@ export function TelecallerExportModal({
             </label>
             <div className="relative">
               <select
-                disabled={currentRole === 'salesperson'}
+                disabled={currentRole === 'sales'}
                 value={selectedTelecaller}
                 onChange={(e) => setSelectedTelecaller(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60 cursor-pointer"
@@ -108,7 +108,7 @@ export function TelecallerExportModal({
                 {currentRole === 'admin' && <option value="Unassigned">Unassigned Leads (For New Allocation)</option>}
               </select>
             </div>
-            {currentRole === 'salesperson' && (
+            {currentRole === 'sales' && (
               <p className="text-[11px] text-slate-400 mt-1">
                 As a telecaller, you are exporting your assigned prospects.
               </p>

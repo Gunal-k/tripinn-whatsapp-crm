@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { whatsappService } from '../../../../lib/services/whatsapp';
-import { leadService } from '../../../../lib/services/leads';
+import { leadService, isTestEnvironment, isSupabaseConfigured } from '../../../../lib/services/leads';
+import { createAdminClient } from '../../../../lib/supabase/admin';
+import { getAuthenticatedStaff } from '../../../../lib/supabase/auth';
 
 export async function POST(request: NextRequest) {
   try {
+    // Enforce active staff authentication on the server
+    if (!isTestEnvironment() && isSupabaseConfigured()) {
+      const { profile, error: authError } = await getAuthenticatedStaff();
+      if (authError || !profile) {
+        return NextResponse.json(
+          { error: authError || 'Unauthorized: Active staff session required' },
+          { status: 401 }
+        );
+      }
+    }
+
     const body = await request.json();
     const { leadId, toPhone, messageText } = body;
 
@@ -14,9 +27,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const adminSupabase = createAdminClient();
+
     let targetPhone = toPhone;
     if (leadId) {
-      const lead = leadService.getLeadById(leadId);
+      const lead = await leadService.getLeadById(leadId, adminSupabase);
       if (!lead) {
         return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
       }
@@ -27,7 +42,6 @@ export async function POST(request: NextRequest) {
     const result = await whatsappService.sendTextMessage(targetPhone, messageText);
 
     if (!result.success) {
-      // In local development or before Meta access token is configured, log safely
       return NextResponse.json(
         {
           success: false,
@@ -38,9 +52,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save outbound message to lead service if leadId provided
+    // Save outbound message to Supabase
     if (leadId) {
-      leadService.sendWhatsAppMessage(leadId, messageText);
+      await leadService.sendWhatsAppMessage(leadId, messageText, adminSupabase);
     }
 
     return NextResponse.json({

@@ -2,7 +2,7 @@
 // TRIPINN HOLIDAYS CRM - CORE TYPE DEFINITIONS
 // ==============================================================================
 
-export type UserRole = 'admin' | 'salesperson';
+export type UserRole = 'admin' | 'sales';
 
 export interface UserProfile {
   id: string;

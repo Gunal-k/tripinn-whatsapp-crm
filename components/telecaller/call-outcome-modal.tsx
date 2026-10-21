@@ -32,22 +32,29 @@ export function CallOutcomeModal({
   const [notes, setNotes] = useState('');
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   if (!isOpen || !lead) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    const updated = leadService.logCallOutcome(
-      lead.id,
-      outcome,
-      notes,
-      outcome === 'CALLBACK_REQUESTED' ? nextFollowUpDate : undefined,
-      telecallerName
-    );
+    try {
+      const updated = await leadService.logCallOutcome(
+        lead.id,
+        outcome,
+        notes,
+        outcome === 'CALLBACK_REQUESTED' ? nextFollowUpDate : undefined,
+        telecallerName
+      );
 
-    if (updated) {
-      onCallLogged(updated);
-      onClose();
+      if (updated) {
+        onCallLogged(updated);
+        onClose();
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -178,9 +185,17 @@ export function CallOutcomeModal({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer"
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
             >
-              Save Call Outcome
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span>Saving Outcome...</span>
+                </>
+              ) : (
+                <span>Save Call Outcome</span>
+              )}
             </button>
           </div>
         </form>

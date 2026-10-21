@@ -26,7 +26,7 @@ interface LeadsViewProps {
   onOpenAddModal: () => void;
   onRefresh?: () => void;
   initialStatusFilter?: string;
-  currentRole?: 'admin' | 'salesperson';
+  currentRole?: 'admin' | 'sales';
   currentUserName?: string;
 }
 
@@ -46,7 +46,7 @@ export function LeadsView({
   );
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'ALL'>('ALL');
   const [qualificationFilter, setQualificationFilter] = useState<QualificationStatus | 'ALL'>('ALL');
-  const [onlyMyLeads, setOnlyMyLeads] = useState<boolean>(currentRole === 'salesperson');
+  const [onlyMyLeads, setOnlyMyLeads] = useState<boolean>(currentRole === 'sales');
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [leadForCallOutcome, setLeadForCallOutcome] = useState<Lead | null>(null);
 
@@ -67,7 +67,7 @@ export function LeadsView({
       qualification: qualificationFilter,
       showArchived: false,
     };
-    let list = leadService.getLeads(filters);
+    let list = leadService.filterLeads(leads, filters);
 
     if (onlyMyLeads) {
       list = list.filter(
@@ -122,7 +122,7 @@ export function LeadsView({
       />
 
       {/* Role Optimization Callout Banner for Telecallers */}
-      {currentRole === 'salesperson' && (
+      {currentRole === 'sales' && (
         <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-xs">
             <PhoneCall className="w-4 h-4 text-blue-400" />

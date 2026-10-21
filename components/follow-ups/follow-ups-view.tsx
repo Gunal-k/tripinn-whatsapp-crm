@@ -71,15 +71,15 @@ export function FollowUpsView({
     };
   }, [leads, currentTime]);
 
-  const handleComplete = (id: string) => {
-    leadService.completeFollowUp(id);
+  const handleComplete = async (id: string) => {
+    await leadService.completeFollowUp(id);
     onRefresh();
   };
 
-  const handleRescheduleSubmit = (e: React.FormEvent) => {
+  const handleRescheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rescheduleLeadId || !rescheduleDate) return;
-    leadService.scheduleFollowUp(rescheduleLeadId, rescheduleDate, rescheduleNotes);
+    await leadService.scheduleFollowUp(rescheduleLeadId, rescheduleDate, rescheduleNotes);
     setRescheduleLeadId(null);
     setRescheduleDate('');
     setRescheduleNotes('');

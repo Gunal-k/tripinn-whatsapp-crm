@@ -1,3 +1,5 @@
+Object.assign(process.env, { NODE_ENV: 'test' });
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'crypto';
@@ -137,8 +139,8 @@ test('WhatsApp Webhook payload parsing & CTWA attribution tests', async (t) => {
 });
 
 test('Meta Conversions API (CAPI) messaging workflow tests', async (t) => {
-  await t.test('builds correct official messaging conversion payload for CTWA leads', () => {
-    const { lead } = leadService.createLead({
+  await t.test('builds correct official messaging conversion payload for CTWA leads', async () => {
+    const { lead } = await leadService.createLead({
       name: 'Aditi Deshmukh',
       phone: '+91 9777700011',
       lead_source: 'WhatsApp',

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Send, 
   Search, 
@@ -8,7 +8,7 @@ import {
   CheckCheck, 
   Sparkles
 } from 'lucide-react';
-import { Lead } from '../../lib/types/crm';
+import { Lead, WhatsAppMessage } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
 
@@ -31,10 +31,32 @@ export function MessagesView({
     return leads.find((l) => l.id === selectedLeadId) || leads[0] || null;
   }, [leads, selectedLeadId]);
 
-  const messages = useMemo(() => {
-    if (!currentLead) return [];
-    return leadService.getLeadMessages(currentLead.id);
-  }, [currentLead]);
+  const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(() => {
+      if (!currentLead?.id) {
+        setMessages([]);
+        return;
+      }
+      setLoadingMessages(true);
+      leadService.getLeadMessages(currentLead.id).then((data) => {
+        if (active) {
+          setMessages(data);
+          setLoadingMessages(false);
+        }
+      }).catch(() => {
+        if (active) setLoadingMessages(false);
+      });
+    }, 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [currentLead?.id]);
 
   const filteredConversations = useMemo(() => {
     return leads.filter((l) => {
@@ -47,12 +69,15 @@ export function MessagesView({
     });
   }, [leads, search]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!composerText.trim() || !currentLead) return;
 
-    leadService.sendWhatsAppMessage(currentLead.id, composerText.trim());
+    const text = composerText.trim();
     setComposerText('');
+    await leadService.sendWhatsAppMessage(currentLead.id, text);
+    const updated = await leadService.getLeadMessages(currentLead.id);
+    setMessages(updated);
     onRefresh();
   };
 
@@ -150,8 +175,9 @@ export function MessagesView({
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-slate-400 font-mono">
-                  {formatPhoneDisplay(currentLead.phone)} • Package: {currentLead.interested_destination || 'General'}
+                <div className="text-xs text-slate-400 font-mono flex items-center space-x-2">
+                  <span>{formatPhoneDisplay(currentLead.phone)} • Package: {currentLead.interested_destination || 'General'}</span>
+                  {loadingMessages && <span className="text-[10px] text-emerald-400 animate-pulse">(syncing...)</span>}
                 </div>
               </div>
             </div>

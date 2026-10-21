@@ -10,7 +10,7 @@ interface TopNavProps {
   onOpenAddLeadModal: () => void;
   onOpenTelecallerExport: () => void;
   followUpsDueCount: number;
-  currentRole: 'admin' | 'salesperson';
+  currentRole: 'admin' | 'sales';
 }
 
 export function TopNav({
