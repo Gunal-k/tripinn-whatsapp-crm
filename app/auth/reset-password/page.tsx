@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Compass, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createClient } from '../../../lib/supabase/client';
 
 export default function ResetPasswordPage() {
@@ -59,8 +59,12 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md bg-[#0b132b] rounded-2xl border border-[#1e293b] p-8 shadow-2xl space-y-6">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-1">
-            <Compass className="w-8 h-8 text-[#070d1a]" />
+          <div className="w-16 h-16 rounded-2xl p-1 bg-white/5 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-1 overflow-hidden">
+            <img 
+              src="/icon.png" 
+              alt="Tripinn Holidays Logo" 
+              className="w-full h-full object-contain rounded-xl"
+            />
           </div>
           <h1 className="text-xl font-bold tracking-wider text-white">TRIPINN HOLIDAYS</h1>
           <p className="text-xs text-slate-400">Set New Account Password</p>

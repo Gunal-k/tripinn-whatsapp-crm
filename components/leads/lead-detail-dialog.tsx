@@ -9,11 +9,15 @@ import {
   Check, 
   CheckCheck, 
   Sparkles,
-  Send
+  Send,
+  UserCheck
 } from 'lucide-react';
-import { Lead, LeadPipelineStage, LeadActivity, WhatsAppMessage } from '../../lib/types/crm';
+import { Lead, LeadPipelineStage, LeadActivity, WhatsAppMessage, UserProfile } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
+import { staffService } from '../../lib/services/staff';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
+import { showToast } from '../../lib/utils/swal';
+import { DateTimePicker } from '../ui/date-time-picker';
 
 interface LeadDetailDialogProps {
   lead: Lead | null;
@@ -48,10 +52,21 @@ export function LeadDetailDialog({
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [staffList, setStaffList] = useState<UserProfile[]>([]);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   useEffect(() => {
     if (!lead?.id) return;
     let active = true;
+
+    // Fetch active staff (excluding administrators) for assignment dropdown
+    staffService.getStaffMembers().then((list) => {
+      if (active) {
+        setStaffList(list.filter((s) => s.is_active && s.role !== 'admin'));
+      }
+    }).catch((err) => {
+      console.warn('Failed to load staff list for assignment:', err);
+    });
 
     const timer = setTimeout(() => {
       setFollowUpDateInput(lead.follow_up_date || '');
@@ -77,6 +92,45 @@ export function LeadDetailDialog({
       clearTimeout(timer);
     };
   }, [lead?.id, lead?.follow_up_date, lead?.follow_up_notes, lead?.updated_at]);
+
+  const handleAssignStaff = async (newStaffId: string) => {
+    if (!lead || isAssigning) return;
+    setIsAssigning(true);
+    try {
+      if (!newStaffId || newStaffId === 'unassigned') {
+        const updated = await leadService.reassignLead(lead.id, '', 'Unassigned', '');
+        if (updated) {
+          onLeadUpdated(updated);
+          const acts = await leadService.getLeadActivities(lead.id);
+          setActivities(acts);
+          showToast('Lead marked as Unassigned.', 'info');
+        }
+        return;
+      }
+
+      const target = staffList.find((s) => s.id === newStaffId);
+      if (!target) return;
+
+      const updated = await leadService.reassignLead(
+        lead.id,
+        target.id,
+        target.full_name,
+        target.email
+      );
+
+      if (updated) {
+        onLeadUpdated(updated);
+        const acts = await leadService.getLeadActivities(lead.id);
+        setActivities(acts);
+        showToast(`Lead assigned to ${target.full_name}!`, 'success');
+      }
+    } catch (err) {
+      console.error('Assign staff error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to assign lead', 'error');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   if (!isOpen || !lead) return null;
 
@@ -124,6 +178,12 @@ export function LeadDetailDialog({
       setShowQualifyBox(false);
       const acts = await leadService.getLeadActivities(lead.id);
       setActivities(acts);
+      showToast(
+        res.metaCapiTriggered
+          ? 'Lead Qualified & Meta CAPI event dispatched!'
+          : 'Lead marked as Qualified!',
+        'success'
+      );
     } else {
       setQualifyError(res.message);
     }
@@ -140,15 +200,30 @@ export function LeadDetailDialog({
     setMessages(refreshedMsgs);
     setActivities(refreshedActs);
     onLeadUpdated({ ...lead, updated_at: new Date().toISOString() });
+    showToast('WhatsApp message sent to Meta Cloud API', 'success');
   };
 
   const handleSaveFollowUp = async () => {
-    const updated = await leadService.scheduleFollowUp(lead.id, followUpDateInput, followUpNotesInput);
-    if (updated) {
-      onLeadUpdated(updated);
-      const acts = await leadService.getLeadActivities(lead.id);
-      setActivities(acts);
-      alert('Follow-up scheduled successfully in database!');
+    try {
+      if (!followUpDateInput && !followUpNotesInput.trim()) {
+        showToast('Please select a follow-up date or enter notes.', 'error');
+        return;
+      }
+      const updated = await leadService.scheduleFollowUp(lead.id, followUpDateInput || null, followUpNotesInput);
+      if (updated) {
+        onLeadUpdated(updated);
+        const acts = await leadService.getLeadActivities(lead.id);
+        setActivities(acts);
+        showToast(
+          followUpDateInput 
+            ? 'Follow-up scheduled successfully!' 
+            : 'Follow-up consultation notes updated!', 
+          'success'
+        );
+      }
+    } catch (err) {
+      console.error('Follow-up schedule error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to schedule follow-up', 'error');
     }
   };
 
@@ -174,10 +249,29 @@ export function LeadDetailDialog({
                   </span>
                 )}
               </div>
-              <div className="flex items-center space-x-3 text-xs text-slate-400 mt-0.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
                 <span>{formatPhoneDisplay(lead.phone)}</span>
                 {lead.email && <span>• {lead.email}</span>}
-                <span>• Assigned: {lead.assigned_salesperson?.full_name || 'Unassigned'}</span>
+                <span className="text-slate-600">•</span>
+                <div className="flex items-center space-x-1.5 bg-[#111d3d] px-2.5 py-1 rounded-lg border border-slate-700/60 shadow-xs">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] text-slate-300 font-medium">Assigned to:</span>
+                  <select
+                    value={lead.assigned_salesperson_id || 'unassigned'}
+                    disabled={isAssigning}
+                    onChange={(e) => handleAssignStaff(e.target.value)}
+                    className="bg-transparent text-emerald-400 font-semibold text-[11px] focus:outline-none cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="unassigned" className="bg-[#0b132b] text-slate-400">
+                      Unassigned
+                    </option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-[#0b132b] text-white">
+                        {s.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -419,12 +513,12 @@ export function LeadDetailDialog({
                   </h3>
                   <div className="space-y-2">
                     <div>
-                      <label className="text-[11px] text-slate-400 block mb-0.5">Date & Time</label>
-                      <input
-                        type="datetime-local"
+                      <label className="text-[11px] text-slate-400 block mb-0.5">Date &amp; Time</label>
+                      <DateTimePicker
                         value={followUpDateInput}
-                        onChange={(e) => setFollowUpDateInput(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded bg-[#0b132b] border border-slate-700 text-xs text-white"
+                        onChange={(val) => setFollowUpDateInput(val)}
+                        enableTime={true}
+                        placeholder="Pick follow-up date & time"
                       />
                     </div>
                     <div>

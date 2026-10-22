@@ -11,6 +11,8 @@ import {
 import { Lead } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
+import { showToast } from '../../lib/utils/swal';
+import { DateTimePicker } from '../ui/date-time-picker';
 
 interface FollowUpsViewProps {
   leads: Lead[];
@@ -73,17 +75,24 @@ export function FollowUpsView({
 
   const handleComplete = async (id: string) => {
     await leadService.completeFollowUp(id);
+    showToast('Follow-up marked as completed!', 'success');
     onRefresh();
   };
 
   const handleRescheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rescheduleLeadId || !rescheduleDate) return;
-    await leadService.scheduleFollowUp(rescheduleLeadId, rescheduleDate, rescheduleNotes);
-    setRescheduleLeadId(null);
-    setRescheduleDate('');
-    setRescheduleNotes('');
-    onRefresh();
+    try {
+      await leadService.scheduleFollowUp(rescheduleLeadId, rescheduleDate, rescheduleNotes);
+      showToast('Consultation rescheduled successfully!', 'success');
+      setRescheduleLeadId(null);
+      setRescheduleDate('');
+      setRescheduleNotes('');
+      onRefresh();
+    } catch (err) {
+      console.error('Reschedule follow-up error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to reschedule consultation', 'error');
+    }
   };
 
   return (
@@ -97,13 +106,13 @@ export function FollowUpsView({
 
             <form onSubmit={handleRescheduleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">New Date & Time</label>
-                <input
-                  type="datetime-local"
-                  required
+                <label className="block text-xs font-semibold text-slate-300 mb-1">New Date &amp; Time</label>
+                <DateTimePicker
                   value={rescheduleDate}
-                  onChange={(e) => setRescheduleDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white"
+                  onChange={(val) => setRescheduleDate(val)}
+                  enableTime={true}
+                  placeholder="Pick new date & time"
+                  required={true}
                 />
               </div>
 

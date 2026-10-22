@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { X, FileSpreadsheet, Download } from 'lucide-react';
 import { Lead } from '../../lib/types/crm';
 import { exportTelecallerExcelSheet } from '../../lib/utils/excel';
+import { showToast } from '../../lib/utils/swal';
 
 interface TelecallerExportModalProps {
   isOpen: boolean;
@@ -60,6 +61,7 @@ export function TelecallerExportModal({
       telecallerName: selectedTelecaller,
       stageFilter: selectedStage,
     });
+    showToast('Excel calling sheet downloaded!', 'success');
     onClose();
   };
 
@@ -73,7 +75,7 @@ export function TelecallerExportModal({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Export Telecaller Calling Sheet</h2>
+              <h2 className="text-base font-bold text-white">Export Staff Calling Sheet</h2>
               <p className="text-xs text-slate-400">Excel (.xlsx) workbook optimized for phone calling workflows</p>
             </div>
           </div>
@@ -87,10 +89,10 @@ export function TelecallerExportModal({
 
         {/* Modal Body */}
         <div className="p-6 space-y-4">
-          {/* Telecaller Filter */}
+          {/* Staff Member Filter */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Select Calling Agent / Telecaller
+              Select Calling Staff Member
             </label>
             <div className="relative">
               <select
@@ -99,7 +101,7 @@ export function TelecallerExportModal({
                 onChange={(e) => setSelectedTelecaller(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60 cursor-pointer"
               >
-                {currentRole === 'admin' && <option value="ALL">All Telecallers (Full Master Sheet)</option>}
+                {currentRole === 'admin' && <option value="ALL">All Staff (Full Master Sheet)</option>}
                 {telecallers.map((t) => (
                   <option key={t} value={t}>
                     {t} {t === currentUserName ? '(You)' : ''}
@@ -110,7 +112,7 @@ export function TelecallerExportModal({
             </div>
             {currentRole === 'sales' && (
               <p className="text-[11px] text-slate-400 mt-1">
-                As a telecaller, you are exporting your assigned prospects.
+                As a staff member, you are exporting your assigned prospects.
               </p>
             )}
           </div>
@@ -137,14 +139,14 @@ export function TelecallerExportModal({
           {/* Included Columns Feature Callout */}
           <div className="p-4 rounded-xl bg-[#070d1a] border border-[#1e293b] space-y-2">
             <span className="text-xs font-bold text-emerald-400 block">
-              Optimized Telecaller Columns Included:
+              Optimized Staff Calling Columns Included:
             </span>
             <ul className="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
               <li>Calling Priority &amp; Overdue Call flags</li>
               <li>Customer name, phone, click-to-call link, &amp; WhatsApp link</li>
               <li>Interested package, travel dates, travelers, &amp; estimated budget</li>
               <li>Past follow-up notes &amp; internal CRM remarks</li>
-              <li>Blank outcome &amp; remarks columns for telecaller notes</li>
+              <li>Blank outcome &amp; remarks columns for staff notes</li>
             </ul>
           </div>
 

@@ -1,0 +1,48 @@
+import { UserProfile } from '../types/crm';
+
+export const INITIAL_MOCK_STAFF: UserProfile[] = [
+  {
+    id: 'user-admin-01',
+    email: 'admin@tripinnholidays.com',
+    full_name: 'Karan Johar',
+    role: 'admin',
+    phone: '+91 98111 22334',
+    avatar_url: null,
+    is_active: true,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'user-sales-01',
+    email: 'priya@tripinnholidays.com',
+    full_name: 'Priya Sharma',
+    role: 'sales',
+    phone: '+91 98200 11223',
+    avatar_url: null,
+    is_active: true,
+    created_at: '2026-02-15T09:30:00.000Z',
+    updated_at: '2026-02-15T09:30:00.000Z',
+  },
+  {
+    id: 'user-sales-02',
+    email: 'rahul@tripinnholidays.com',
+    full_name: 'Rahul Verma',
+    role: 'sales',
+    phone: '+91 98300 44556',
+    avatar_url: null,
+    is_active: true,
+    created_at: '2026-03-01T10:15:00.000Z',
+    updated_at: '2026-03-01T10:15:00.000Z',
+  },
+  {
+    id: 'user-sales-03',
+    email: 'ananya@tripinnholidays.com',
+    full_name: 'Ananya Patel',
+    role: 'sales',
+    phone: '+91 98400 77889',
+    avatar_url: null,
+    is_active: false,
+    created_at: '2026-04-10T11:00:00.000Z',
+    updated_at: '2026-04-10T11:00:00.000Z',
+  },
+];

@@ -10,12 +10,13 @@ import {
   Settings, 
   CheckCircle2, 
   LogOut,
-  Sparkles,
   PhoneCall,
-  ShieldCheck
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
+import { ThemeToggle } from '../theme/theme-toggle';
 
-export type NavigationTab = 'dashboard' | 'leads' | 'follow-ups' | 'messages' | 'settings';
+export type NavigationTab = 'dashboard' | 'leads' | 'follow-ups' | 'messages' | 'staff' | 'settings';
 
 interface SidebarProps {
   currentTab: NavigationTab;
@@ -73,11 +74,18 @@ export function Sidebar({
       adminOnly: false,
     },
     {
+      id: 'staff' as NavigationTab,
+      label: 'Staff & Team',
+      icon: UserCheck,
+      badge: null,
+      adminOnly: true, // Only visible to admins
+    },
+    {
       id: 'settings' as NavigationTab,
       label: 'Integrations & API',
       icon: Settings,
       badge: null,
-      adminOnly: true, // Hidden for telecallers/sales reps
+      adminOnly: true, // Hidden for staff members
     },
   ];
 
@@ -99,50 +107,54 @@ export function Sidebar({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-[#0b132b] border-r border-[#1e293b] flex flex-col transition-transform duration-200 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-[#0b132b] border-r border-[#1e293b] flex flex-col shrink-0 transition-transform duration-200 ease-in-out ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Brand Header */}
-        <div className="p-5 border-b border-[#1e293b] flex items-center justify-between">
+        <div className="p-4 border-b border-[#1e293b] flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Compass className="w-6 h-6 text-[#070d1a]" />
+            <div className="w-10 h-10 rounded-xl p-0.5 bg-white/5 border border-emerald-500/30 flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0 overflow-hidden">
+              <img 
+                src="/icon.png" 
+                alt="Tripinn Holidays Logo" 
+                className="w-full h-full object-contain rounded-lg"
+              />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-1.5">
-                <span className="font-bold text-base tracking-wider text-white">TRIPINN</span>
-                <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <span className="font-bold text-sm tracking-wide text-white whitespace-nowrap">TRIPINN HOLIDAYS</span>
+                <span className="text-[9px] uppercase font-semibold px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
                   CRM
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium tracking-tight">Holidays &amp; Luxury Tours</p>
+              <p className="text-[11px] text-slate-400 font-medium tracking-tight truncate">Luxury Tours &amp; Travel</p>
             </div>
           </div>
         </div>
 
         {/* Current Role Indicator Pill */}
         <div className="px-4 py-2.5 bg-[#070d1a] border-b border-[#1e293b] flex items-center justify-between">
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-2 min-w-0">
             {currentRole === 'admin' ? (
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             ) : (
-              <PhoneCall className="w-3.5 h-3.5 text-blue-400" />
+              <PhoneCall className="w-3.5 h-3.5 text-blue-400 shrink-0" />
             )}
-            <span className="text-[11px] font-bold tracking-wider uppercase text-slate-200">
-              {currentRole === 'admin' ? 'Role: Administrator' : 'Role: Telecaller'}
+            <span className="text-[11px] font-bold tracking-wider uppercase text-slate-200 whitespace-nowrap">
+              {currentRole === 'admin' ? 'Role: Administrator' : 'Role: Staff'}
             </span>
           </div>
 
-          <div className="text-[10px] text-emerald-400/80 font-mono px-2 py-0.5 rounded bg-[#111d3d] border border-emerald-500/20">
+          <div className="text-[10px] text-emerald-400/80 font-mono px-2 py-0.5 rounded bg-[#111d3d] border border-emerald-500/20 shrink-0">
             Active
           </div>
         </div>
 
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-          <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider uppercase text-slate-400">
-            {currentRole === 'admin' ? 'Administration' : 'Telecaller Workspace'}
+          <div className="px-3.5 pb-2 text-[11px] font-semibold tracking-wider uppercase text-slate-400">
+            {currentRole === 'admin' ? 'Administration' : 'Staff Workspace'}
           </div>
 
           {visibleNavItems.map((item) => {
@@ -162,13 +174,13 @@ export function Sidebar({
                     : 'text-slate-300 hover:bg-[#111d3d] hover:text-white'
                 }`}
               >
-                <div className="flex items-center space-x-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
+                <div className="flex items-center space-x-3 min-w-0">
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <span className="whitespace-nowrap tracking-tight">{item.label}</span>
                 </div>
 
                 {item.badge !== null && (
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${item.badgeColor}`}>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${item.badgeColor}`}>
                     {item.badge}
                   </span>
                 )}
@@ -177,17 +189,9 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* Attribution & CTWA Live Badge */}
-        <div className="p-4 mx-3 mb-3 rounded-xl bg-gradient-to-br from-[#111d3d] to-[#0b132b] border border-emerald-500/20">
-          <div className="flex items-center space-x-2 text-xs font-medium text-emerald-400 mb-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Meta CTWA &amp; CAPI Ready</span>
-          </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            {currentRole === 'admin'
-              ? 'Click-to-WhatsApp ad attribution & server-side qualified lead events enabled.'
-              : 'Qualified leads automatically signal Meta Conversions API upon verification.'}
-          </p>
+        {/* Visual Theme Mode Switcher */}
+        <div className="px-4 pb-3 pt-2">
+          <ThemeToggle variant="sidebar" />
         </div>
 
         {/* Staff User Footer Profile */}
@@ -208,7 +212,7 @@ export function Sidebar({
                 <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
               </div>
               <p className="text-[10px] text-emerald-400/90 font-medium">
-                {currentRole === 'admin' ? 'System Administrator' : 'Senior Telecaller / Rep'}
+                {currentRole === 'admin' ? 'System Administrator' : 'Staff Member'}
               </p>
             </div>
           </div>
@@ -217,7 +221,14 @@ export function Sidebar({
             title="Sign Out"
             className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
             onClick={async () => {
-              const confirmed = window.confirm('Are you sure you want to sign out of Tripinn CRM?');
+              const { showConfirmDialog } = await import('../../lib/utils/swal');
+              const confirmed = await showConfirmDialog({
+                title: 'Sign Out of Tripinn CRM?',
+                text: 'Are you sure you want to securely end your active staff workspace session?',
+                confirmButtonText: 'Yes, Sign Out',
+                cancelButtonText: 'Stay in Workspace',
+                isDanger: true,
+              });
               if (!confirmed) return;
               try {
                 const { createClient } = await import('../../lib/supabase/client');

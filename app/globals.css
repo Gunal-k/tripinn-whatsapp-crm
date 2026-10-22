@@ -1,40 +1,588 @@
 @import "tailwindcss";
+@import "sweetalert2/dist/sweetalert2.min.css";
+@import "flatpickr/dist/flatpickr.min.css";
 
 :root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --emerald-accent: #10b981;
+
+  /* SweetAlert2 Light Theme Defaults */
+  --swal2-background: #ffffff;
+  --swal2-color: #0f172a;
+  --swal2-backdrop: rgba(15, 23, 42, 0.45);
+  --swal2-border: 1px solid #e2e8f0;
+  --swal2-border-radius: 1rem;
+}
+
+html.dark {
   --background: #070d1a;
   --foreground: #f1f5f9;
   --card-bg: #0b132b;
   --card-border: #1e293b;
-  --emerald-accent: #10b981;
+
+  --swal2-background: #0b132b;
+  --swal2-color: #f1f5f9;
+  --swal2-backdrop: rgba(3, 7, 18, 0.75);
+  --swal2-border: 1px solid #1e293b;
 }
 
 body {
-  background-color: #070d1a;
-  color: #f1f5f9;
+  background-color: var(--background);
+  color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
 }
 
-/* Custom scrollbars for CRM tables and message containers */
+/* ==============================================================================
+   LIGHT MODE OVERRIDES
+   ============================================================================== */
+
+html.light,
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html.light body,
+html:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Primary surface & background mappings */
+html.light .bg-\[\#070d1a\],
+html:not(.dark) .bg-\[\#070d1a\] {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-\[\#0b132b\],
+html:not(.dark) .bg-\[\#0b132b\] {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .bg-\[\#0b132b\]\/80,
+html:not(.dark) .bg-\[\#0b132b\]\/80,
+html.light .bg-\[\#0b132b\]\/90,
+html:not(.dark) .bg-\[\#0b132b\]\/90,
+html.light .bg-\[\#0b132b\]\/95,
+html:not(.dark) .bg-\[\#0b132b\]\/95 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+html.light .bg-\[\#111d3d\],
+html:not(.dark) .bg-\[\#111d3d\] {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .hover\:bg-\[\#111d3d\]:hover,
+html:not(.dark) .hover\:bg-\[\#111d3d\]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .hover\:bg-\[\#1a2c5a\]:hover,
+html:not(.dark) .hover\:bg-\[\#1a2c5a\]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .bg-\[\#070d1a\]\/50,
+html:not(.dark) .bg-\[\#070d1a\]\/50,
+html.light .bg-\[\#070d1a\]\/70,
+html:not(.dark) .bg-\[\#070d1a\]\/70 {
+  background-color: rgba(241, 245, 249, 0.75) !important;
+}
+
+/* Borders */
+html.light .border-\[\#1e293b\],
+html:not(.dark) .border-\[\#1e293b\],
+html.light .border-slate-700\/60,
+html:not(.dark) .border-slate-700\/60,
+html.light .border-slate-800,
+html:not(.dark) .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Text Hierarchy */
+html.light .text-white,
+html:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-100,
+html:not(.dark) .text-slate-100 {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-200,
+html:not(.dark) .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-300,
+html:not(.dark) .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light .text-slate-400,
+html:not(.dark) .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500,
+html:not(.dark) .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .hover\:text-white:hover,
+html:not(.dark) .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* Form Inputs, Selects, and Textareas */
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html:not(.dark) select,
+html.light textarea,
+html:not(.dark) textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html:not(.dark) input::placeholder,
+html.light textarea::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Retain high-contrast white text for solid action buttons */
+html.light button.bg-emerald-500,
+html:not(.dark) button.bg-emerald-500,
+html.light .bg-emerald-500,
+html:not(.dark) .bg-emerald-500,
+html.light .bg-emerald-600,
+html:not(.dark) .bg-emerald-600,
+html.light button.bg-rose-500,
+html:not(.dark) button.bg-rose-500,
+html.light .bg-rose-500,
+html:not(.dark) .bg-rose-500 {
+  color: #ffffff !important;
+}
+
+html.light button.bg-emerald-500 *,
+html:not(.dark) button.bg-emerald-500 *,
+html.light .bg-emerald-500 *,
+html:not(.dark) .bg-emerald-500 *,
+html.light button.bg-rose-500 *,
+html:not(.dark) button.bg-rose-500 *,
+html.light .bg-rose-500 *,
+html:not(.dark) .bg-rose-500 * {
+  color: #ffffff !important;
+}
+
+/* Status Badges with enhanced contrast in Light Mode */
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20,
+html:not(.dark) .bg-emerald-500\/10,
+html:not(.dark) .bg-emerald-500\/15,
+html:not(.dark) .bg-emerald-500\/20 {
+  background-color: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+}
+
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/15,
+html.light .bg-blue-500\/20,
+html:not(.dark) .bg-blue-500\/10,
+html:not(.dark) .bg-blue-500\/15,
+html:not(.dark) .bg-blue-500\/20 {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+}
+
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20,
+html:not(.dark) .bg-amber-500\/10,
+html:not(.dark) .bg-amber-500\/15,
+html:not(.dark) .bg-amber-500\/20 {
+  background-color: #fffbeb !important;
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+}
+
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/15,
+html.light .bg-purple-500\/20,
+html:not(.dark) .bg-purple-500\/10,
+html:not(.dark) .bg-purple-500\/15,
+html:not(.dark) .bg-purple-500\/20 {
+  background-color: #faf5ff !important;
+  color: #7e22ce !important;
+  border-color: #e9d5ff !important;
+}
+
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/15,
+html.light .bg-rose-500\/20,
+html:not(.dark) .bg-rose-500\/10,
+html:not(.dark) .bg-rose-500\/15,
+html:not(.dark) .bg-rose-500\/20 {
+  background-color: #fff1f2 !important;
+  color: #be123c !important;
+  border-color: #fecdd3 !important;
+}
+
+/* Modals & Dialogs Backdrop */
+html.light .bg-black\/80,
+html.light .bg-black\/70,
+html:not(.dark) .bg-black\/80,
+html:not(.dark) .bg-black\/70 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* SweetAlert2 in Light Mode */
+html.light .swal2-popup,
+html:not(.dark) .swal2-popup {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+html.light .swal2-title,
+html:not(.dark) .swal2-title {
+  color: #0f172a !important;
+}
+
+html.light .swal2-html-container,
+html:not(.dark) .swal2-html-container {
+  color: #475569 !important;
+}
+
+html.light .swal2-toast,
+html:not(.dark) .swal2-toast {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.light .swal2-cancel,
+html:not(.dark) .swal2-cancel {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b132b;
+  background: var(--card-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--card-border);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: var(--emerald-accent);
+}
+
+html.light ::-webkit-scrollbar-track,
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html.light ::-webkit-scrollbar-thumb,
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover,
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
 
-/* Smooth transitions */
-* {
-  border-color: #1e293b;
+/* ==============================================================================
+   FLATPICKR TRIPINN HOLIDAYS THEME (DARK & LIGHT)
+   ============================================================================== */
+
+/* Dark Mode (Default) */
+.flatpickr-calendar {
+  background: #0b132b !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
+  font-family: inherit !important;
+  overflow: hidden;
+  z-index: 99999 !important;
+}
+
+.flatpickr-months {
+  background: #070d1a !important;
+  border-bottom: 1px solid #1e293b !important;
+  padding: 6px 0 !important;
+}
+
+.flatpickr-months .flatpickr-month {
+  color: #f1f5f9 !important;
+  fill: #f1f5f9 !important;
+}
+
+.flatpickr-current-month {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #f1f5f9 !important;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowUp:after {
+  border-bottom-color: #10b981 !important;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowDown:after {
+  border-top-color: #10b981 !important;
+}
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: #10b981 !important;
+  fill: #10b981 !important;
+  padding: 8px !important;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover svg,
+.flatpickr-months .flatpickr-next-month:hover svg {
+  fill: #34d399 !important;
+}
+
+span.flatpickr-weekday {
+  color: #94a3b8 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  background: transparent !important;
+}
+
+.flatpickr-day {
+  color: #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  border-color: transparent !important;
+  transition: all 0.15s ease-in-out;
+}
+
+.flatpickr-day:hover {
+  background: #111d3d !important;
+  border-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+.flatpickr-day.today {
+  border-color: #10b981 !important;
+  color: #34d399 !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #070d1a !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3) !important;
+}
+
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: #475569 !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  background: transparent !important;
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month {
+  background-color: #0b132b !important;
+  color: #f1f5f9 !important;
+}
+
+.flatpickr-current-month input.cur-year {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-current-month input.cur-year:focus {
+  background: #111d3d !important;
+  border-radius: 4px !important;
+}
+
+.flatpickr-time {
+  background: #070d1a !important;
+  border-top: 1px solid #1e293b !important;
+  line-height: 40px !important;
+  height: 40px !important;
+  padding: 0 6px !important;
+}
+
+.flatpickr-time input {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease-in-out;
+}
+
+.flatpickr-time input:hover,
+.flatpickr-time input:focus {
+  background: #111d3d !important;
+  color: #10b981 !important;
+  border: 1px solid #10b981 !important;
+  outline: none !important;
+}
+
+.flatpickr-time .numInputWrapper {
+  border-radius: 6px !important;
+}
+
+.flatpickr-time .numInputWrapper:hover {
+  background: transparent !important;
+}
+
+.flatpickr-time .numInputWrapper span {
+  border: none !important;
+}
+
+.flatpickr-time .numInputWrapper span:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowUp:after {
+  border-bottom-color: #10b981 !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowDown:after {
+  border-top-color: #10b981 !important;
+}
+
+.flatpickr-time .flatpickr-time-separator,
+.flatpickr-time .flatpickr-am-pm {
+  color: #94a3b8 !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-time .flatpickr-am-pm {
+  border-radius: 6px !important;
+  transition: all 0.15s ease-in-out;
+}
+
+.flatpickr-time .flatpickr-am-pm:hover,
+.flatpickr-time .flatpickr-am-pm:focus {
+  background: #111d3d !important;
+  color: #10b981 !important;
+}
+
+/* Light Mode Overrides */
+html.light .flatpickr-calendar,
+html:not(.dark) .flatpickr-calendar {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .flatpickr-months,
+html:not(.dark) .flatpickr-months {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html.light .flatpickr-current-month,
+html:not(.dark) .flatpickr-current-month {
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-current-month .flatpickr-monthDropdown-months,
+html:not(.dark) .flatpickr-current-month .flatpickr-monthDropdown-months {
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month,
+html:not(.dark) .flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-current-month input.cur-year,
+html:not(.dark) .flatpickr-current-month input.cur-year {
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-day,
+html:not(.dark) .flatpickr-day {
+  color: #1e293b !important;
+}
+
+html.light .flatpickr-day:hover,
+html:not(.dark) .flatpickr-day:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-day.selected,
+html:not(.dark) .flatpickr-day.selected {
+  background: #10b981 !important;
+  color: #ffffff !important;
+}
+
+html.light .flatpickr-time,
+html:not(.dark) .flatpickr-time {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+html.light .flatpickr-time input,
+html:not(.dark) .flatpickr-time input {
+  color: #0f172a !important;
+}
+
+html.light .flatpickr-time input:hover,
+html:not(.dark) .flatpickr-time input:hover,
+html.light .flatpickr-time input:focus,
+html:not(.dark) .flatpickr-time input:focus {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  border: 1px solid #10b981 !important;
+}
+
+html.light .flatpickr-time .numInputWrapper span.arrowUp:after,
+html:not(.dark) .flatpickr-time .numInputWrapper span.arrowUp:after {
+  border-bottom-color: #059669 !important;
+}
+
+html.light .flatpickr-time .numInputWrapper span.arrowDown:after,
+html:not(.dark) .flatpickr-time .numInputWrapper span.arrowDown:after {
+  border-top-color: #059669 !important;
+}
+
+html.light .flatpickr-time .flatpickr-am-pm:hover,
+html:not(.dark) .flatpickr-time .flatpickr-am-pm:hover,
+html.light .flatpickr-time .flatpickr-am-pm:focus,
+html:not(.dark) .flatpickr-time .flatpickr-am-pm:focus {
+  background: #e2e8f0 !important;
+  color: #059669 !important;
 }

@@ -12,13 +12,16 @@ import {
   Sparkles,
   PhoneCall,
   MessageCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserCheck
 } from 'lucide-react';
-import { Lead, LeadFilters, LeadPipelineStage, LeadSource, QualificationStatus } from '../../lib/types/crm';
+import { Lead, LeadFilters, LeadPipelineStage, LeadSource, QualificationStatus, UserProfile } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
+import { staffService } from '../../lib/services/staff';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
 import { exportTelecallerExcelSheet } from '../../lib/utils/excel';
 import { CallOutcomeModal } from '../telecaller/call-outcome-modal';
+import { showToast } from '../../lib/utils/swal';
 
 interface LeadsViewProps {
   leads: Lead[];
@@ -46,15 +49,56 @@ export function LeadsView({
   );
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'ALL'>('ALL');
   const [qualificationFilter, setQualificationFilter] = useState<QualificationStatus | 'ALL'>('ALL');
+  const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>('ALL');
+  const [staffList, setStaffList] = useState<UserProfile[]>([]);
   const [onlyMyLeads, setOnlyMyLeads] = useState<boolean>(currentRole === 'sales');
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [leadForCallOutcome, setLeadForCallOutcome] = useState<Lead | null>(null);
 
+  const unassignedCount = useMemo(
+    () => leads.filter((l) => !l.assigned_salesperson_id).length,
+    [leads]
+  );
+
+  const handleQuickAssign = async (leadId: string, newStaffId: string) => {
+    try {
+      if (!newStaffId || newStaffId === 'unassigned') {
+        await leadService.reassignLead(leadId, '', 'Unassigned', '');
+        showToast('Lead marked as Unassigned.', 'info');
+      } else {
+        const target = staffList.find((s) => s.id === newStaffId);
+        if (target) {
+          await leadService.reassignLead(leadId, target.id, target.full_name, target.email);
+          showToast(`Lead assigned to ${target.full_name}!`, 'success');
+        }
+      }
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to assign lead', 'error');
+    }
+  };
+
   useEffect(() => {
+    let active = true;
+    staffService
+      .getStaffMembers()
+      .then((list) => {
+        if (active) {
+          setStaffList(list.filter((s) => s.is_active && s.role !== 'admin'));
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load staff list in LeadsView:', err);
+      });
+
     const timer = setTimeout(() => {
       setCurrentTime(Date.now());
     }, 0);
-    return () => clearTimeout(timer);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   const filteredLeads = useMemo(() => {
@@ -69,6 +113,14 @@ export function LeadsView({
     };
     let list = leadService.filterLeads(leads, filters);
 
+    if (currentRole === 'admin') {
+      if (selectedStaffFilter === 'UNASSIGNED') {
+        list = list.filter((l) => !l.assigned_salesperson_id);
+      } else if (selectedStaffFilter !== 'ALL') {
+        list = list.filter((l) => l.assigned_salesperson_id === selectedStaffFilter);
+      }
+    }
+
     if (onlyMyLeads) {
       list = list.filter(
         (l) => l.assigned_salesperson?.full_name === currentUserName || !l.assigned_salesperson_id
@@ -76,13 +128,14 @@ export function LeadsView({
     }
 
     return list;
-  }, [leads, search, statusFilter, sourceFilter, qualificationFilter, onlyMyLeads, currentUserName]);
+  }, [leads, search, statusFilter, sourceFilter, qualificationFilter, selectedStaffFilter, currentRole, onlyMyLeads, currentUserName]);
 
   const handleExportExcel = () => {
     exportTelecallerExcelSheet(filteredLeads, {
       telecallerName: onlyMyLeads ? currentUserName : 'ALL',
       stageFilter: statusFilter,
     });
+    showToast('Excel calling sheet downloaded!', 'success');
   };
 
   const handleExportCsv = () => {
@@ -95,6 +148,7 @@ export function LeadsView({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast('CSV export downloaded!', 'success');
   };
 
   const stages: LeadPipelineStage[] = [
@@ -121,13 +175,13 @@ export function LeadsView({
         telecallerName={currentUserName}
       />
 
-      {/* Role Optimization Callout Banner for Telecallers */}
+      {/* Role Optimization Callout Banner for Staff */}
       {currentRole === 'sales' && (
         <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-xs">
             <PhoneCall className="w-4 h-4 text-blue-400" />
             <span className="text-white font-medium">
-              Telecaller High-Velocity Mode: Showing leads assigned to <strong>{currentUserName}</strong> with 1-click calling &amp; call logging.
+              Staff Calling Mode: Showing leads assigned to <strong>{currentUserName}</strong> with 1-click calling &amp; call logging.
             </span>
           </div>
           <button
@@ -165,7 +219,7 @@ export function LeadsView({
                   : 'bg-[#070d1a] text-slate-400 border-[#1e293b] hover:text-white'
               }`}
             >
-              {onlyMyLeads ? 'My Leads' : 'All Telecallers'}
+              {onlyMyLeads ? 'My Leads' : 'All Staff'}
             </button>
           )}
 
@@ -209,6 +263,39 @@ export function LeadsView({
             <option value="DISQUALIFIED">Disqualified</option>
           </select>
 
+          {/* Staff Filter (Admin Only) */}
+          {currentRole === 'admin' && (
+            <select
+              value={selectedStaffFilter}
+              onChange={(e) => setSelectedStaffFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            >
+              <option value="ALL">All Staff</option>
+              <option value="UNASSIGNED">Unassigned Leads</option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.full_name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Unassigned Leads Quick Filter Button */}
+          {currentRole === 'admin' && unassignedCount > 0 && (
+            <button
+              onClick={() => setSelectedStaffFilter((prev) => (prev === 'UNASSIGNED' ? 'ALL' : 'UNASSIGNED'))}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                selectedStaffFilter === 'UNASSIGNED'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30'
+              }`}
+              title="Click to view all unassigned leads"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Unassigned ({unassignedCount})</span>
+            </button>
+          )}
+
           {/* View Mode Toggle */}
           <div className="flex items-center bg-[#070d1a] p-1 rounded-lg border border-[#1e293b]">
             <button
@@ -227,11 +314,11 @@ export function LeadsView({
             </button>
           </div>
 
-          {/* Export Telecaller Excel Sheet */}
+          {/* Export Staff Excel Sheet */}
           <button
             onClick={handleExportExcel}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
-            title="Download formatted Excel calling sheet (.xlsx) for telecallers"
+            title="Download formatted Excel calling sheet (.xlsx) for staff"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
             <span>Excel Sheet</span>
@@ -272,7 +359,7 @@ export function LeadsView({
                   <th className="py-3 px-4">Stage</th>
                   <th className="py-3 px-4">Qualification</th>
                   <th className="py-3 px-4">Follow-up Call</th>
-                  <th className="py-3 px-4 text-right">Telecaller Actions</th>
+                  <th className="py-3 px-4 text-right">Staff Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e293b]">
@@ -304,11 +391,32 @@ export function LeadsView({
                           <div className="text-[11px] text-slate-400 font-mono">
                             {formatPhoneDisplay(item.phone)}
                           </div>
-                          {item.assigned_salesperson?.full_name && (
-                            <div className="text-[10px] text-slate-500 mt-0.5">
-                              Rep: {item.assigned_salesperson.full_name}
-                            </div>
-                          )}
+                          <div className="text-[10px] mt-1.5 flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                            {currentRole === 'admin' ? (
+                              <div className="flex items-center space-x-1 bg-[#070d1a] border border-slate-700/80 rounded px-1.5 py-0.5">
+                                <UserCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <select
+                                  value={item.assigned_salesperson_id || 'unassigned'}
+                                  onChange={(e) => handleQuickAssign(item.id, e.target.value)}
+                                  className="bg-transparent text-[10px] font-semibold text-emerald-400 focus:outline-none cursor-pointer"
+                                  title="Quick Assign Staff Member"
+                                >
+                                  <option value="unassigned" className="bg-[#0b132b] text-amber-400">
+                                    Unassigned
+                                  </option>
+                                  {staffList.map((s) => (
+                                    <option key={s.id} value={s.id} className="bg-[#0b132b] text-white">
+                                      {s.full_name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <span className="text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                Staff: {item.assigned_salesperson?.full_name || 'Unassigned'}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Quick Contact Buttons (Click to Call & WhatsApp) */}
@@ -426,6 +534,14 @@ export function LeadsView({
                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end space-x-1.5">
                             <button
+                              onClick={() => onSelectLead(item)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-xs font-bold border border-emerald-500/30 transition cursor-pointer flex items-center space-x-1"
+                              title="Assign or reassign this lead"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>Assign</span>
+                            </button>
+                            <button
                               onClick={() => setLeadForCallOutcome(item)}
                               className="px-2.5 py-1 rounded-lg bg-[#111d3d] hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-200 text-xs font-semibold border border-slate-700 transition cursor-pointer"
                               title="Log Call Outcome & Remarks"
@@ -489,6 +605,32 @@ export function LeadsView({
                         <p className="text-xs text-emerald-400 font-medium mt-1 truncate">
                           {item.interested_destination || 'Trip Enquiry'}
                         </p>
+                        <div className="text-[10px] mt-1.5 flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                          {currentRole === 'admin' ? (
+                            <div className="flex items-center space-x-1 bg-[#0b132b] border border-slate-700 rounded px-1.5 py-0.5 w-full">
+                              <UserCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <select
+                                value={item.assigned_salesperson_id || 'unassigned'}
+                                onChange={(e) => handleQuickAssign(item.id, e.target.value)}
+                                className="bg-transparent text-[10px] font-semibold text-emerald-400 focus:outline-none cursor-pointer w-full truncate"
+                                title="Quick Assign Staff Member"
+                              >
+                                <option value="unassigned" className="bg-[#0b132b] text-amber-400">
+                                  Unassigned
+                                </option>
+                                {staffList.map((s) => (
+                                  <option key={s.id} value={s.id} className="bg-[#0b132b] text-white">
+                                    {s.full_name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 truncate">
+                              Staff: {item.assigned_salesperson?.full_name || 'Unassigned'}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-1 border-t border-slate-800">
                           <span>{formatPhoneDisplay(item.phone)}</span>
                           {item.estimated_budget && (

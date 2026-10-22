@@ -116,6 +116,11 @@ test('Lead service management & duplicate detection tests', async (t) => {
     assert.equal(scheduled?.follow_up_completed, false);
     assert.equal(scheduled?.follow_up_notes, 'Discuss flight tickets');
 
+    // Test that passing empty string "" safely sanitizes date to null without throwing
+    const sanitized = await leadService.scheduleFollowUp(lead.id, '', 'Only updating notes');
+    assert.equal(sanitized?.follow_up_date, null);
+    assert.equal(sanitized?.follow_up_notes, 'Only updating notes');
+
     const completed = await leadService.completeFollowUp(lead.id);
     assert.equal(completed?.follow_up_completed, true);
   });

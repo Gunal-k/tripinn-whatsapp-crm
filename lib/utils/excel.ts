@@ -76,13 +76,13 @@ export function exportTelecallerExcelSheet(leads: Lead[], options?: TelecallerEx
       'Estimated Budget (INR)': lead.estimated_budget ? `₹${Number(lead.estimated_budget).toLocaleString('en-IN')}` : 'Unquoted',
       'Current Pipeline Stage': lead.lead_status,
       'Qualification Status': lead.qualification_status,
-      'Assigned Telecaller': lead.assigned_salesperson?.full_name || 'Unassigned',
+      'Assigned Staff': lead.assigned_salesperson?.full_name || 'Unassigned',
       'Scheduled Call Date & Time': lead.follow_up_date ? new Date(lead.follow_up_date).toLocaleString() : 'No schedule set',
       'Follow-up Agenda / Past Notes': lead.follow_up_notes || 'Initial consultation call required',
       'Internal CRM Notes': lead.internal_notes || '',
-      'Call Outcome (Fill after call)': '', // Blank column for telecaller
-      'Revised Follow-up Date': '',         // Blank column for telecaller
-      'Telecaller Remarks / Feedback': '',  // Blank column for telecaller
+      'Call Outcome (Fill after call)': '', // Blank column for staff
+      'Revised Follow-up Date': '',         // Blank column for staff
+      'Staff Remarks / Feedback': '',  // Blank column for staff
     };
   });
 
@@ -106,26 +106,26 @@ export function exportTelecallerExcelSheet(leads: Lead[], options?: TelecallerEx
     { wch: 20 }, // Budget
     { wch: 18 }, // Stage
     { wch: 18 }, // Qualification
-    { wch: 20 }, // Telecaller
+    { wch: 20 }, // Assigned Staff
     { wch: 24 }, // Scheduled Date
     { wch: 35 }, // Follow-up Notes
     { wch: 30 }, // Internal Notes
     { wch: 24 }, // Call Outcome (Blank)
     { wch: 22 }, // Revised Date (Blank)
-    { wch: 35 }, // Telecaller Remarks (Blank)
+    { wch: 35 }, // Staff Remarks (Blank)
   ];
   worksheet['!cols'] = colWidths;
 
   // 5. Create workbook and append sheet
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Telecaller Calling Sheet');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Staff Calling Sheet');
 
-  // 6. Generate filename with date and telecaller name
+  // 6. Generate filename with date and staff name
   const dateStr = new Date().toISOString().slice(0, 10);
-  const telecallerSlug = options?.telecallerName && options.telecallerName !== 'ALL'
+  const staffSlug = options?.telecallerName && options.telecallerName !== 'ALL'
     ? `_${options.telecallerName.replace(/\s+/g, '_')}`
-    : '_All_Telecallers';
-  const filename = `Tripinn_Calling_Sheet${telecallerSlug}_${dateStr}.xlsx`;
+    : '_All_Staff';
+  const filename = `Tripinn_Calling_Sheet${staffSlug}_${dateStr}.xlsx`;
 
   // 7. Write and trigger download in browser
   XLSX.writeFile(workbook, filename);

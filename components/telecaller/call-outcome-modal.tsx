@@ -5,6 +5,8 @@ import { X, PhoneCall, CheckCircle, Clock, PhoneOff, XCircle, PhoneForwarded } f
 import { Lead } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
+import { showToast } from '../../lib/utils/swal';
+import { DateTimePicker } from '../ui/date-time-picker';
 
 interface CallOutcomeModalProps {
   lead: Lead | null;
@@ -51,6 +53,7 @@ export function CallOutcomeModal({
 
       if (updated) {
         onCallLogged(updated);
+        showToast('Call outcome logged successfully!', 'success');
         onClose();
       }
     } finally {
@@ -150,12 +153,12 @@ export function CallOutcomeModal({
               <label className="block text-xs font-bold text-amber-300 mb-1">
                 Scheduled Callback Date &amp; Time
               </label>
-              <input
-                type="datetime-local"
-                required
+              <DateTimePicker
                 value={nextFollowUpDate}
-                onChange={(e) => setNextFollowUpDate(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-lg bg-[#070d1a] border border-amber-500/40 text-xs text-white"
+                onChange={(val) => setNextFollowUpDate(val)}
+                enableTime={true}
+                placeholder="Pick callback date & time"
+                required={true}
               />
             </div>
           )}
@@ -163,7 +166,7 @@ export function CallOutcomeModal({
           {/* Call Remarks */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Telecaller Call Notes &amp; Client Feedback
+              Staff Call Notes &amp; Client Feedback
             </label>
             <textarea
               rows={3}

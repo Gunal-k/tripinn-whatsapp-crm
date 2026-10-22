@@ -26,6 +26,9 @@ interface DashboardViewProps {
   onNavigateToLeads: (statusFilter?: string) => void;
   onNavigateToFollowUps: () => void;
   onRefresh: () => void;
+  currentRole?: 'admin' | 'sales';
+  onOpenAddStaffModal?: () => void;
+  onNavigateToStaff?: () => void;
 }
 
 const STAGES = [
@@ -45,6 +48,9 @@ export function DashboardView({
   onNavigateToLeads,
   onNavigateToFollowUps,
   onRefresh,
+  currentRole,
+  onOpenAddStaffModal,
+  onNavigateToStaff,
 }: DashboardViewProps) {
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'ALL'>('ALL');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7days' | '30days' | 'this_month'>('all');
@@ -258,6 +264,45 @@ export function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* Admin Quick Action: Staff Provisioning Banner */}
+      {currentRole === 'admin' && onOpenAddStaffModal && (
+        <div className="bg-gradient-to-r from-purple-950/40 via-[#0b132b] to-[#0b132b] p-4.5 rounded-xl border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-purple-950/20">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-white">Staff &amp; Team Management</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  ADMIN ONLY
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Add telecallers or administrator accounts directly from this dashboard without accessing Supabase.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2.5 w-full sm:w-auto">
+            {onNavigateToStaff && (
+              <button
+                onClick={onNavigateToStaff}
+                className="flex-1 sm:flex-none px-3.5 py-2 rounded-lg bg-[#111d3d] hover:bg-[#1a2c5a] text-slate-300 text-xs font-semibold border border-[#1e293b] transition cursor-pointer"
+              >
+                View Staff
+              </button>
+            )}
+            <button
+              onClick={onOpenAddStaffModal}
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] text-xs font-bold shadow-md shadow-emerald-500/20 transition cursor-pointer active:scale-95"
+            >
+              <UserPlus className="w-4 h-4 stroke-[2.5]" />
+              <span>Add Staff Directly</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Pipeline Funnel Distribution */}
       <div className="bg-[#0b132b] p-5 rounded-xl border border-[#1e293b]">

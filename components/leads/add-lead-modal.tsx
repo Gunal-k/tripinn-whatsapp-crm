@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, UserCheck } from 'lucide-react';
 import { leadService } from '../../lib/services/leads';
+import { staffService } from '../../lib/services/staff';
 import { createLeadSchema, CreateLeadInput } from '../../lib/validations/lead';
-import { Lead, LeadSource } from '../../lib/types/crm';
+import { Lead, LeadSource, UserProfile } from '../../lib/types/crm';
 import { formatPhoneDisplay } from '../../lib/utils/phone';
+import { showToast } from '../../lib/utils/swal';
+import { DateTimePicker } from '../ui/date-time-picker';
 
 interface AddLeadModalProps {
   isOpen: boolean;
@@ -25,6 +28,7 @@ export function AddLeadModal({
     phone: '',
     email: '',
     lead_source: 'WhatsApp',
+    assigned_salesperson_id: '',
     interested_destination: '',
     travel_dates: '',
     number_of_travelers: 2,
@@ -34,11 +38,29 @@ export function AddLeadModal({
     internal_notes: '',
   });
 
+  const [staffList, setStaffList] = useState<UserProfile[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [duplicateWarning, setDuplicateWarning] = useState<Lead | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    staffService
+      .getStaffMembers()
+      .then((list) => {
+        if (active) {
+          setStaffList(list.filter((s) => s.is_active && s.role !== 'admin'));
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load staff list in AddLeadModal:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -60,7 +82,21 @@ export function AddLeadModal({
     setErrors({});
     setSubmitError(null);
 
-    const result = createLeadSchema.safeParse(formData);
+    const payload: Partial<CreateLeadInput> = {
+      ...formData,
+      assigned_salesperson_id:
+        formData.assigned_salesperson_id &&
+        formData.assigned_salesperson_id !== 'unassigned' &&
+        formData.assigned_salesperson_id.trim() !== ''
+          ? formData.assigned_salesperson_id
+          : null,
+      follow_up_date:
+        formData.follow_up_date && formData.follow_up_date.trim() !== ''
+          ? formData.follow_up_date
+          : null,
+    };
+
+    const result = createLeadSchema.safeParse(payload);
     if (!result.success) {
       const errMap: Record<string, string> = {};
       result.error.issues.forEach((issue) => {
@@ -83,6 +119,7 @@ export function AddLeadModal({
 
       const { lead } = await leadService.createLead(result.data);
       onLeadCreated(lead);
+      showToast(`Lead created for ${lead.name}!`, 'success');
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create lead in database';
@@ -218,6 +255,25 @@ export function AddLeadModal({
               </select>
             </div>
 
+            {/* Assign to Staff Member */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Assign to Staff Member
+              </label>
+              <select
+                value={formData.assigned_salesperson_id || 'unassigned'}
+                onChange={(e) => setFormData({ ...formData, assigned_salesperson_id: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-sm text-white focus:outline-none focus:border-emerald-500"
+              >
+                <option value="unassigned">Unassigned (Pool Queue)</option>
+                {staffList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Interested Destination */}
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -280,11 +336,11 @@ export function AddLeadModal({
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Follow-up Date & Time
               </label>
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={formData.follow_up_date || ''}
-                onChange={(e) => setFormData({ ...formData, follow_up_date: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-sm text-white focus:outline-none focus:border-emerald-500"
+                onChange={(val) => setFormData({ ...formData, follow_up_date: val })}
+                enableTime={true}
+                placeholder="Pick follow-up date & time"
               />
             </div>
 

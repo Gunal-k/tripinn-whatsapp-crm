@@ -9,7 +9,9 @@ import { LeadsView } from './leads/leads-view';
 import { FollowUpsView } from './follow-ups/follow-ups-view';
 import { MessagesView } from './messages/messages-view';
 import { SettingsView } from './settings/settings-view';
+import { StaffView } from './staff/staff-view';
 import { AddLeadModal } from './leads/add-lead-modal';
+import { AddStaffModal } from './staff/add-staff-modal';
 import { LeadDetailDialog } from './leads/lead-detail-dialog';
 import { TelecallerExportModal } from './telecaller/telecaller-export-modal';
 import { Lead } from '../lib/types/crm';
@@ -25,6 +27,7 @@ export default function CRMApp() {
   const [loadingLeads, setLoadingLeads] = useState<boolean>(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [isTelecallerExportOpen, setIsTelecallerExportOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [statusFilterForLeads, setStatusFilterForLeads] = useState<string | undefined>(undefined);
@@ -70,14 +73,16 @@ export default function CRMApp() {
       try {
         const supabase = createClient();
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (userError || !user) {
-          router.push('/login');
+        if (sessionError || !session || !session.user) {
+          router.push('/login?error=unauthorized');
           return;
         }
+
+        const user = session.user;
 
         // Fetch verified profile from public.profiles
         const { data: profile, error: profileError } = await supabase
@@ -96,14 +101,12 @@ export default function CRMApp() {
           const verifiedRole: 'admin' | 'sales' = profile.role === 'admin' ? 'admin' : 'sales';
           setCurrentRole(verifiedRole);
           setCurrentUserName(profile.full_name || user.email?.split('@')[0] || 'Staff User');
-        }
-      } catch (err) {
-        console.warn('Session verification error:', err);
-      } finally {
-        if (isSubscribed) {
           setIsMounted(true);
           await fetchLeads();
         }
+      } catch (err) {
+        console.warn('Session verification error:', err);
+        router.push('/login?error=unauthorized');
       }
     }
 
@@ -204,6 +207,7 @@ export default function CRMApp() {
           currentTab={currentTab}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           onOpenAddLeadModal={() => setIsAddModalOpen(true)}
+          onOpenAddStaffModal={() => setIsAddStaffModalOpen(true)}
           onOpenTelecallerExport={() => setIsTelecallerExportOpen(true)}
           followUpsDueCount={followUpsDueCount}
           currentRole={currentRole}
@@ -225,6 +229,9 @@ export default function CRMApp() {
                   onNavigateToLeads={handleNavigateToLeads}
                   onNavigateToFollowUps={handleNavigateToFollowUps}
                   onRefresh={refreshLeads}
+                  currentRole={currentRole}
+                  onOpenAddStaffModal={() => setIsAddStaffModalOpen(true)}
+                  onNavigateToStaff={() => setCurrentTab('staff')}
                 />
               )}
 
@@ -256,6 +263,16 @@ export default function CRMApp() {
                 />
               )}
 
+              {currentTab === 'staff' && currentRole === 'admin' && (
+                <StaffView
+                  leads={leads}
+                  onGoToLeadsPipeline={() => setCurrentTab('leads')}
+                  onOpenAddStaffModal={() => setIsAddStaffModalOpen(true)}
+                  currentRole={currentRole}
+                  currentUserName={currentUserName}
+                />
+              )}
+
               {currentTab === 'settings' && currentRole === 'admin' && <SettingsView />}
             </>
           )}
@@ -268,6 +285,15 @@ export default function CRMApp() {
         onClose={() => setIsAddModalOpen(false)}
         onLeadCreated={handleLeadCreated}
         onSelectExistingLead={handleOpenLeadDetail}
+      />
+
+      {/* Add Staff Modal (Direct Staff Provisioning) */}
+      <AddStaffModal
+        isOpen={isAddStaffModalOpen}
+        onClose={() => setIsAddStaffModalOpen(false)}
+        onStaffCreated={() => {
+          // If on staff tab, StaffView will refresh or state persists
+        }}
       />
 
       {/* Telecaller Calling Sheet Excel Export Modal */}

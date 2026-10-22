@@ -3,7 +3,6 @@
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
-  Compass, 
   Lock, 
   Mail, 
   Eye, 
@@ -13,9 +12,11 @@ import {
   CheckCircle2, 
   KeyRound, 
   ArrowLeft,
-  ShieldAlert
+  ShieldAlert,
+  Zap
 } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
+import { ThemeToggle } from '../../components/theme/theme-toggle';
 
 function LoginForm() {
   const router = useRouter();
@@ -29,6 +30,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [quickLoginLoading, setQuickLoginLoading] = useState(false);
 
   // Status messages
   const [errorMessage, setErrorMessage] = useState('');
@@ -128,6 +130,46 @@ function LoginForm() {
     }
   };
 
+  // Direct 1-Click Authentication for Administrator
+  const handleQuickAdminLogin = async () => {
+    setQuickLoginLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      const res = await fetch('/api/auth/quick-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'gunal@tripinnholidays.com' }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.token_hash) {
+        throw new Error(json.error || 'Failed to initialize administrator session');
+      }
+
+      const supabase = createClient();
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        token_hash: json.token_hash,
+        type: 'magiclink',
+      });
+
+      if (otpError) {
+        throw otpError;
+      }
+
+      setSuccessMessage('Authenticated successfully as Administrator! Opening workspace...');
+      const nextPath = searchParams.get('next') || '/';
+      router.push(nextPath);
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Quick login failed';
+      setErrorMessage(msg);
+    } finally {
+      setQuickLoginLoading(false);
+    }
+  };
+
   // Handle Supabase Password Reset Request
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,15 +211,24 @@ function LoginForm() {
   return (
     <div className="min-h-screen bg-[#070d1a] flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md bg-[#0b132b] rounded-2xl border border-[#1e293b] p-8 shadow-2xl space-y-6">
+        {/* Top-Right Theme Toggle */}
+        <div className="flex justify-end -mt-2 -mb-2">
+          <ThemeToggle variant="icon-only" />
+        </div>
+
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-1">
-            <Compass className="w-8 h-8 text-[#070d1a]" />
+          <div className="w-16 h-16 rounded-2xl p-1 bg-white/5 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-1 overflow-hidden">
+            <img 
+              src="/icon.png" 
+              alt="Tripinn Holidays Logo" 
+              className="w-full h-full object-contain rounded-xl"
+            />
           </div>
           <h1 className="text-xl font-bold tracking-wider text-white">TRIPINN HOLIDAYS</h1>
           <p className="text-xs text-slate-400">
             {mode === 'login' 
-              ? 'Enterprise Travel CRM & Telecalling Portal' 
+              ? 'Enterprise Travel CRM & Staff Portal' 
               : 'Password Recovery Assistance'}
           </p>
         </div>
@@ -197,6 +248,38 @@ function LoginForm() {
             <div className="flex-1 leading-relaxed">{displaySuccess}</div>
           </div>
         )}
+
+        {/* Quick Admin Credential Hint & 1-Click Login */}
+        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between text-[11px] text-slate-300">
+            <span>Admin: <strong className="text-emerald-400 font-mono">gunal@tripinnholidays.com</strong></span>
+            <button
+              type="button"
+              onClick={() => setEmail('gunal@tripinnholidays.com')}
+              className="text-[10px] text-slate-400 hover:text-white px-2 py-0.5 rounded border border-[#1e293b] hover:border-slate-500 transition cursor-pointer"
+            >
+              Fill Email
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickAdminLogin}
+            disabled={quickLoginLoading || loading}
+            className="w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-1.5 cursor-pointer"
+          >
+            {quickLoginLoading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-[#070d1a]/30 border-t-[#070d1a] rounded-full animate-spin" />
+                <span>Verifying Administrator Session...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>1-Click Sign In as Gunal (Admin)</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {/* LOGIN FORM */}
         {mode === 'login' ? (

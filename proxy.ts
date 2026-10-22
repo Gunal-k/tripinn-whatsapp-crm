@@ -19,6 +19,8 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico') ||
+    pathname.startsWith('/icon.png') ||
+    pathname.startsWith('/icon-cropped.png') ||
     pathname.match(/\.(png|jpg|jpeg|gif|svg|webp|ico|css|js|map|txt|woff|woff2)$/)
   ) {
     return response;
@@ -62,12 +64,16 @@ export async function proxy(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+    const hasBearerToken = Boolean(authHeader && authHeader.toLowerCase().startsWith('bearer '));
+
     const isPublicAuthRoute = 
       pathname === '/login' || 
-      pathname.startsWith('/auth/');
+      pathname.startsWith('/auth/') ||
+      pathname.startsWith('/api/auth/');
 
     // 4. Protect CRM pages & API routes from unauthenticated access
-    if (!user && !isPublicAuthRoute) {
+    if (!user && !isPublicAuthRoute && !hasBearerToken) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json(
           { error: 'Unauthorized: Staff authentication required' },
@@ -96,8 +102,8 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except static files, images, and favicon
+     * Match all request paths except static files, images, favicon, and icon
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-cropped.png).*)',
   ],
 };

@@ -622,13 +622,18 @@ export const leadService = {
   /**
    * Schedules a follow-up
    */
-  async scheduleFollowUp(id: string, followUpDate: string, notes?: string, client?: SupabaseClient): Promise<Lead | null> {
+  async scheduleFollowUp(id: string, followUpDate?: string | null, notes?: string, client?: SupabaseClient): Promise<Lead | null> {
+    // Sanitize followUpDate: ensure empty string is converted to null so Postgres timestamp never errors
+    const cleanFollowUpDate = (typeof followUpDate === 'string' && followUpDate.trim() !== '') 
+      ? followUpDate.trim() 
+      : null;
+
     if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
       const idx = mockLeadsStore.findIndex((l) => l.id === id);
       if (idx === -1) return null;
       const updated: Lead = {
         ...mockLeadsStore[idx],
-        follow_up_date: followUpDate,
+        follow_up_date: cleanFollowUpDate,
         follow_up_notes: notes || null,
         follow_up_completed: false,
         updated_at: new Date().toISOString(),
@@ -636,8 +641,10 @@ export const leadService = {
       mockLeadsStore[idx] = updated;
       await this.addActivity(id, {
         activity_type: 'follow_up_scheduled',
-        title: 'Follow-up Scheduled',
-        description: `Follow-up set for ${new Date(followUpDate).toLocaleString()}: ${notes || 'No notes'}`,
+        title: cleanFollowUpDate ? 'Follow-up Scheduled' : 'Follow-up Notes Updated',
+        description: cleanFollowUpDate 
+          ? `Follow-up set for ${new Date(cleanFollowUpDate).toLocaleString()}: ${notes || 'No notes'}`
+          : `Follow-up notes updated: ${notes || 'No notes'}`,
       }, client);
       return updated;
     }
@@ -646,7 +653,7 @@ export const leadService = {
     const { data, error } = await sb
       .from('leads')
       .update({
-        follow_up_date: followUpDate,
+        follow_up_date: cleanFollowUpDate,
         follow_up_notes: notes || null,
         follow_up_completed: false,
         updated_at: new Date().toISOString(),
@@ -664,8 +671,10 @@ export const leadService = {
 
     await this.addActivity(id, {
       activity_type: 'follow_up_scheduled',
-      title: 'Follow-up Scheduled',
-      description: `Follow-up set for ${new Date(followUpDate).toLocaleString()}: ${notes || 'No notes'}`,
+      title: cleanFollowUpDate ? 'Follow-up Scheduled' : 'Follow-up Notes Updated',
+      description: cleanFollowUpDate 
+        ? `Follow-up set for ${new Date(cleanFollowUpDate).toLocaleString()}: ${notes || 'No notes'}`
+        : `Follow-up notes updated: ${notes || 'No notes'}`,
     }, client);
 
     return updated;
@@ -1051,8 +1060,8 @@ export const leadService = {
       if (current.lead_status === 'NEW') newStatus = 'CONTACTED';
     } else if (outcome === 'CALLBACK_REQUESTED') {
       newStatus = 'FOLLOW_UP';
-      if (nextFollowUpDate) {
-        newFollowUpDate = nextFollowUpDate;
+      if (nextFollowUpDate && typeof nextFollowUpDate === 'string' && nextFollowUpDate.trim() !== '') {
+        newFollowUpDate = nextFollowUpDate.trim();
         newFollowUpCompleted = false;
         newFollowUpNotes = notes;
       }
@@ -1061,6 +1070,9 @@ export const leadService = {
       newQual = 'DISQUALIFIED';
       newFollowUpCompleted = true;
     }
+
+    // Ensure follow_up_date is null if empty string
+    newFollowUpDate = (typeof newFollowUpDate === 'string' && newFollowUpDate.trim() !== '') ? newFollowUpDate.trim() : null;
 
     if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
       const updated: Lead = {
@@ -1093,7 +1105,7 @@ export const leadService = {
         qualification_status: newQual,
         last_contact_date: now,
         follow_up_date: newFollowUpDate,
-        follow_up_notes: newFollowUpNotes,
+        follow_up_notes: newFollowUpNotes || null,
         follow_up_completed: newFollowUpCompleted,
         updated_at: now,
       })
@@ -1122,20 +1134,22 @@ export const leadService = {
    * Reassigns lead to a telecaller
    */
   async reassignLead(leadId: string, staffId: string, staffName: string, staffEmail: string, client?: SupabaseClient): Promise<Lead | null> {
+    const isUnassigned = !staffId || staffId === 'unassigned';
+
     if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
       const idx = mockLeadsStore.findIndex((l) => l.id === leadId);
       if (idx === -1) return null;
       const updated: Lead = {
         ...mockLeadsStore[idx],
-        assigned_salesperson_id: staffId,
-        assigned_salesperson: { id: staffId, full_name: staffName, email: staffEmail },
+        assigned_salesperson_id: isUnassigned ? null : staffId,
+        assigned_salesperson: isUnassigned ? undefined : { id: staffId, full_name: staffName, email: staffEmail },
         updated_at: new Date().toISOString(),
       };
       mockLeadsStore[idx] = updated;
       await this.addActivity(leadId, {
         activity_type: 'note_added',
         title: 'Lead Reassigned',
-        description: `Lead assigned to telecaller ${staffName}.`,
+        description: isUnassigned ? 'Lead marked as unassigned.' : `Lead assigned to staff member ${staffName}.`,
       }, client);
       return updated;
     }
@@ -1144,7 +1158,9 @@ export const leadService = {
     const updatePayload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
-    if (staffId.length > 20) {
+    if (isUnassigned) {
+      updatePayload.assigned_salesperson_id = null;
+    } else if (staffId.length > 20) {
       updatePayload.assigned_salesperson_id = staffId;
     }
 
@@ -1161,12 +1177,18 @@ export const leadService = {
 
     if (!data) return null;
     const updated = mapDbRowToLead(data as Record<string, unknown>);
-    updated.assigned_salesperson = { id: staffId, full_name: staffName, email: staffEmail };
+    if (!isUnassigned) {
+      updated.assigned_salesperson = { id: staffId, full_name: staffName, email: staffEmail };
+      updated.assigned_salesperson_id = staffId;
+    } else {
+      updated.assigned_salesperson = undefined;
+      updated.assigned_salesperson_id = null;
+    }
 
     await this.addActivity(leadId, {
       activity_type: 'note_added',
       title: 'Lead Reassigned',
-      description: `Lead assigned to telecaller ${staffName}.`,
+      description: isUnassigned ? 'Lead marked as unassigned.' : `Lead assigned to staff member ${staffName}.`,
     }, client);
 
     return updated;
