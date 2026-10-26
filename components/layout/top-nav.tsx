@@ -56,27 +56,27 @@ export function TopNav({
     },
   };
 
-  const currentInfo = titles[currentTab];
+  const currentInfo = titles[currentTab] || titles.dashboard;
 
   return (
-    <header className="h-18 bg-[#0b132b]/80 backdrop-blur-md border-b border-[#1e293b] px-4 md:px-8 flex items-center justify-between sticky top-0 z-30">
+    <header className="h-16 md:h-18 bg-[#0b132b]/80 backdrop-blur-xl border-b border-white/[0.08] px-3 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-colors">
       {/* Left: Mobile Toggle & Page Title */}
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-2.5 md:space-x-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
-          className="p-2 rounded-lg bg-[#111d3d] text-slate-300 hover:text-white md:hidden cursor-pointer"
-          aria-label="Open Navigation"
+          className="w-11 h-11 rounded-xl bg-[#111d3d] border border-white/[0.08] text-slate-300 hover:text-white md:hidden cursor-pointer shrink-0 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+          aria-label="Open Navigation Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center space-x-2">
-            <h1 className="text-base md:text-lg font-bold text-white tracking-tight">
+            <h1 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight truncate max-w-[150px] xs:max-w-[220px] sm:max-w-none">
               {currentInfo.title}
             </h1>
             <span
-              className={`hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded ${
+              className={`hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                 currentRole === 'admin'
                   ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                   : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
@@ -85,16 +85,16 @@ export function TopNav({
               {currentRole === 'admin' ? 'ADMIN' : 'STAFF'}
             </span>
           </div>
-          <p className="hidden sm:block text-xs text-slate-400">
+          <p className="hidden sm:block text-xs text-slate-400 truncate mt-0.5">
             {currentInfo.subtitle}
           </p>
         </div>
       </div>
 
       {/* Right: Actions & Indicators */}
-      <div className="flex items-center space-x-2 md:space-x-3">
+      <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 shrink-0">
         {/* System Health Badges */}
-        <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[#111d3d] border border-slate-700/60 text-xs">
+        <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#111d3d] border border-white/[0.08] text-xs shadow-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-slate-300 font-medium">WhatsApp Cloud API</span>
           <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
@@ -106,19 +106,18 @@ export function TopNav({
         {/* Excel Calling Sheet Export Button */}
         <button
           onClick={onOpenTelecallerExport}
-          className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-[#111d3d] hover:bg-[#1a2c5a] text-emerald-300 font-semibold text-xs border border-emerald-500/30 shadow-xs transition cursor-pointer"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-[#111d3d] hover:bg-[#1a2c5a] text-emerald-300 font-semibold text-xs border border-white/[0.08] shadow-xs transition-all cursor-pointer active:scale-95"
           title="Download Staff Calling Sheet in Microsoft Excel (.xlsx) format"
         >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          <span className="hidden sm:inline">Excel Calling Sheet</span>
-          <span className="sm:hidden">Excel</span>
+          <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="hidden sm:inline">Calling Sheet</span>
         </button>
 
         {/* Follow-up Reminder Bell */}
         {followUpsDueCount > 0 && (
-          <div className="relative p-2 rounded-lg bg-[#111d3d] text-amber-400 border border-amber-500/30">
+          <div className="relative min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#111d3d] text-amber-400 border border-amber-500/30">
             <Bell className="w-4 h-4" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center">
+            <span className="absolute 1 top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center shadow-xs">
               {followUpsDueCount}
             </span>
           </div>
@@ -128,22 +127,21 @@ export function TopNav({
         {currentRole === 'admin' && onOpenAddStaffModal && (
           <button
             onClick={onOpenAddStaffModal}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-semibold text-xs border border-purple-500/30 shadow-xs transition cursor-pointer active:scale-95"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 font-semibold text-xs border border-purple-500/30 shadow-xs transition-all cursor-pointer active:scale-95"
             title="Directly provision a new staff member or administrator"
           >
-            <UserPlus className="w-3.5 h-3.5 text-purple-400 stroke-[2.5]" />
+            <UserPlus className="w-4 h-4 text-purple-400 stroke-[2] shrink-0" />
             <span className="hidden sm:inline">Add Staff</span>
-            <span className="sm:hidden">Staff</span>
           </button>
         )}
 
         {/* New Lead Quick Action Button */}
         <button
           onClick={onOpenAddLeadModal}
-          className="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] font-semibold text-xs md:text-sm shadow-md shadow-emerald-500/20 transition-all cursor-pointer active:scale-95"
+          className="min-h-[44px] flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] font-bold text-xs md:text-sm shadow-md shadow-emerald-500/20 transition-all cursor-pointer active:scale-95"
         >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Add Lead</span>
+          <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+          <span className="whitespace-nowrap">Add Lead</span>
         </button>
       </div>
     </header>

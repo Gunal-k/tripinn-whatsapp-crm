@@ -131,4 +131,22 @@ test('Lead service management & duplicate detection tests', async (t) => {
     assert.ok(csv.includes('Lead ID,Customer Name,Phone'));
     assert.ok(csv.includes('919820123456'));
   });
+
+  await t.test('permanently deletes lead and associated data', async () => {
+    const { lead } = await leadService.createLead({
+      name: 'Temporary Lead To Delete',
+      phone: '+91 9999000088',
+      lead_source: 'manual',
+    });
+
+    const foundBefore = await leadService.getLeadById(lead.id);
+    assert.ok(foundBefore !== null);
+
+    const deleted = await leadService.deleteLead(lead.id);
+    assert.equal(deleted, true);
+
+    const foundAfter = await leadService.getLeadById(lead.id);
+    assert.equal(foundAfter, null);
+  });
 });
+

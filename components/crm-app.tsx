@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar, NavigationTab } from './layout/sidebar';
 import { TopNav } from './layout/top-nav';
+import { MobileBottomNav } from './layout/mobile-bottom-nav';
 import { DashboardView } from './dashboard/dashboard-view';
 import { LeadsView } from './leads/leads-view';
 import { FollowUpsView } from './follow-ups/follow-ups-view';
@@ -23,6 +24,7 @@ export default function CRMApp() {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
   const [currentRole, setCurrentRole] = useState<'admin' | 'sales'>('admin');
   const [currentUserName, setCurrentUserName] = useState<string>('Staff User');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState<boolean>(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -53,11 +55,13 @@ export default function CRMApp() {
         try {
           const storedRole = typeof window !== 'undefined' ? localStorage.getItem('tripinn_current_role') : null;
           const storedName = typeof window !== 'undefined' ? localStorage.getItem('tripinn_user_name') : null;
+          const storedId = typeof window !== 'undefined' ? localStorage.getItem('tripinn_user_id') : null;
           if (storedRole) {
             const normalized = storedRole === 'admin' ? 'admin' : 'sales';
             if (isSubscribed) {
               setCurrentRole(normalized);
               setCurrentUserName(storedName || (normalized === 'admin' ? 'Karan Johar (Admin)' : 'Priya Sharma'));
+              setCurrentUserId(storedId || (normalized === 'admin' ? 'user-admin-01' : 'user-sales-01'));
             }
           }
         } catch {
@@ -101,6 +105,7 @@ export default function CRMApp() {
           const verifiedRole: 'admin' | 'sales' = profile.role === 'admin' ? 'admin' : 'sales';
           setCurrentRole(verifiedRole);
           setCurrentUserName(profile.full_name || user.email?.split('@')[0] || 'Staff User');
+          setCurrentUserId(profile.id);
           setIsMounted(true);
           await fetchLeads();
         }
@@ -143,9 +148,17 @@ export default function CRMApp() {
   };
 
   // Compute pending follow-ups count
-  const followUpsDueCount = leads.filter(
-    (l) => l.follow_up_date && !l.follow_up_completed && !l.is_archived
-  ).length;
+  const followUpsDueCount = leads.filter((l) => {
+    if (!l.follow_up_date || l.follow_up_completed || l.is_archived) return false;
+    if (currentRole === 'sales' && currentUserId) {
+      return (
+        l.assigned_salesperson_id === currentUserId ||
+        l.assigned_salesperson?.id === currentUserId ||
+        (currentUserName && l.assigned_salesperson?.full_name?.toLowerCase() === currentUserName.toLowerCase())
+      );
+    }
+    return true;
+  }).length;
 
   const handleNavigateToLeads = (statusFilter?: string) => {
     setStatusFilterForLeads(statusFilter);
@@ -170,9 +183,16 @@ export default function CRMApp() {
     setSelectedLead(updatedLead);
   };
 
+  const handleLeadDeleted = (deletedLeadId: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== deletedLeadId));
+    if (selectedLead?.id === deletedLeadId) {
+      setSelectedLead(null);
+    }
+  };
+
   if (!isMounted) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#070d1a] text-emerald-400">
+      <div className="flex h-[100dvh] w-full items-center justify-center bg-[#070d1a] text-emerald-400">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin" />
           <span className="text-xs font-semibold tracking-widest uppercase text-slate-400">
@@ -184,7 +204,7 @@ export default function CRMApp() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#070d1a] text-slate-100 antialiased selection:bg-emerald-500 selection:text-black">
+    <div className="flex h-[100dvh] w-full max-w-full overflow-hidden bg-[#070d1a] text-slate-100 antialiased selection:bg-emerald-500 selection:text-black">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -214,7 +234,7 @@ export default function CRMApp() {
         />
 
         {/* Scrollable View Container */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-8 space-y-4 sm:space-y-6 pb-24 md:pb-8">
           {loadingLeads && leads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
               <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
@@ -230,6 +250,8 @@ export default function CRMApp() {
                   onNavigateToFollowUps={handleNavigateToFollowUps}
                   onRefresh={refreshLeads}
                   currentRole={currentRole}
+                  currentUserName={currentUserName}
+                  currentUserId={currentUserId}
                   onOpenAddStaffModal={() => setIsAddStaffModalOpen(true)}
                   onNavigateToStaff={() => setCurrentTab('staff')}
                 />
@@ -244,6 +266,7 @@ export default function CRMApp() {
                   initialStatusFilter={statusFilterForLeads}
                   currentRole={currentRole}
                   currentUserName={currentUserName}
+                  currentUserId={currentUserId}
                 />
               )}
 
@@ -252,6 +275,9 @@ export default function CRMApp() {
                   leads={leads}
                   onSelectLead={handleOpenLeadDetail}
                   onRefresh={refreshLeads}
+                  currentRole={currentRole}
+                  currentUserName={currentUserName}
+                  currentUserId={currentUserId}
                 />
               )}
 
@@ -277,6 +303,20 @@ export default function CRMApp() {
             </>
           )}
         </main>
+
+        {/* Mobile Apple-style Bottom Navigation Bar */}
+        <MobileBottomNav
+          currentTab={currentTab}
+          onSelectTab={(tab) => {
+            if (tab === 'leads') setStatusFilterForLeads(undefined);
+            setCurrentTab(tab);
+          }}
+          followUpsCount={followUpsDueCount}
+          unreadMessagesCount={2}
+          onOpenAddLeadModal={() => setIsAddModalOpen(true)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          currentRole={currentRole}
+        />
       </div>
 
       {/* Add Lead Modal */}
@@ -311,6 +351,8 @@ export default function CRMApp() {
         isOpen={Boolean(selectedLead)}
         onClose={() => setSelectedLead(null)}
         onLeadUpdated={handleLeadUpdated}
+        onLeadDeleted={handleLeadDeleted}
+        currentRole={currentRole}
       />
     </div>
   );

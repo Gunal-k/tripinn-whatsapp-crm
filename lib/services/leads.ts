@@ -56,6 +56,31 @@ export function getServiceClient(customClient?: SupabaseClient): SupabaseClient 
 }
 
 /**
+ * Helper to build request headers, attaching the Supabase Auth Bearer token if present.
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (typeof window !== 'undefined') {
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch {
+      // Session extraction error, proceed with cookies
+    }
+  }
+
+  return headers;
+}
+
+/**
  * Maps a Supabase database row to our strongly typed Lead object.
  * Reconciles column naming differences between initial tables (source/status)
  * and full migration (lead_source/lead_status).
@@ -79,8 +104,12 @@ export function mapDbRowToLead(row: Record<string, unknown>): Lead {
     assigned_salesperson: row.assigned_salesperson_id
       ? {
           id: String(row.assigned_salesperson_id),
-          full_name: (row.profiles as { full_name?: string })?.full_name || 'Assigned Staff',
-          email: (row.profiles as { email?: string })?.email || 'staff@tripinnholidays.com',
+          full_name:
+            ((Array.isArray(row.profiles) ? row.profiles[0] : row.profiles) as { full_name?: string })?.full_name ||
+            'Assigned Staff',
+          email:
+            ((Array.isArray(row.profiles) ? row.profiles[0] : row.profiles) as { email?: string })?.email ||
+            'staff@tripinnholidays.com',
         }
       : null,
     last_contact_date: (row.last_contact_date as string) || (row.created_at as string) || null,
@@ -205,24 +234,51 @@ export const leadService = {
    * Fetches leads from Supabase PostgreSQL (or mock fallback if unconfigured in test)
    */
   async getLeads(filters?: LeadFilters, client?: SupabaseClient): Promise<Lead[]> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       return this.filterLeads(mockLeadsStore, filters);
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        let url = '/api/admin/leads';
+        if (filters?.showArchived) {
+          url += '?archived=true';
+        }
+        const res = await fetch(url, { method: 'GET', headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && Array.isArray(json.data)) {
+            const leads = json.data.map((row: Record<string, unknown>) => mapDbRowToLead(row));
+            return this.filterLeads(leads, filters);
+          }
+        }
+      } catch (err) {
+        console.warn('API leads fetch fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
     let query = sb
       .from('leads')
-      .select('*')
+      .select('*, profiles:assigned_salesperson_id(id, full_name, email)')
       .order('created_at', { ascending: false });
 
     if (filters?.showArchived) {
       query = query.eq('is_archived', true);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
     if (error) {
-      // If table empty or RLS blocks anon, throw error rather than pretending success
-      throw new Error(`Database error fetching leads: ${error.message}`);
+      // Graceful fallback if join syntax differs
+      const fallbackRes = await sb
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (fallbackRes.error) {
+        throw new Error(`Database error fetching leads: ${fallbackRes.error.message}`);
+      }
+      data = fallbackRes.data;
     }
 
     const leads = (data || []).map((row) => mapDbRowToLead(row as Record<string, unknown>));
@@ -233,19 +289,38 @@ export const leadService = {
    * Fetches a lead by ID
    */
   async getLeadById(id: string, client?: SupabaseClient): Promise<Lead | null> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       return mockLeadsStore.find((l) => l.id === id) || null;
     }
 
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/admin/leads?id=${encodeURIComponent(id)}`, { method: 'GET', headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API getLeadById fallback to direct client:', err);
+      }
+    }
+
     const sb = getServiceClient(client);
-    const { data, error } = await sb
+    let { data, error } = await sb
       .from('leads')
-      .select('*')
+      .select('*, profiles:assigned_salesperson_id(id, full_name, email)')
       .eq('id', id)
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Database error finding lead ${id}: ${error.message}`);
+      const fallback = await sb.from('leads').select('*').eq('id', id).maybeSingle();
+      if (fallback.error) {
+        throw new Error(`Database error finding lead ${id}: ${fallback.error.message}`);
+      }
+      data = fallback.data;
     }
 
     if (!data) return null;
@@ -259,7 +334,7 @@ export const leadService = {
     const normalized = normalizePhoneNumber(rawPhone);
     if (!normalized) return null;
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       return mockLeadsStore.find((l) => l.phone === normalized && l.id !== excludeLeadId) || null;
     }
 
@@ -289,7 +364,7 @@ export const leadService = {
       return { lead: existing, duplicateFound: true };
     }
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const newLead: Lead = {
         id: `lead-${Date.now()}`,
         name: data.name,
@@ -330,6 +405,28 @@ export const leadService = {
         description: `Lead created via ${newLead.lead_source}.`,
       }, client);
       return { lead: newLead, duplicateFound: false };
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'create_lead', ...data }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.lead) {
+            return {
+              lead: mapDbRowToLead(json.lead as Record<string, unknown>),
+              duplicateFound: Boolean(json.duplicateFound),
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('API createLead fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -397,7 +494,7 @@ export const leadService = {
    * Updates lead details in Supabase
    */
   async updateLead(id: string, updates: UpdateLeadInput, client?: SupabaseClient): Promise<Lead | null> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const index = mockLeadsStore.findIndex((l) => l.id === id);
       if (index === -1) return null;
       const current = mockLeadsStore[index];
@@ -409,6 +506,25 @@ export const leadService = {
       };
       mockLeadsStore[index] = updated;
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'update', id, updates }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API updateLead fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -457,7 +573,7 @@ export const leadService = {
 
     const prevStatus = current.lead_status;
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const updated: Lead = {
         ...current,
         lead_status: newStatus,
@@ -471,6 +587,25 @@ export const leadService = {
         description: `Lead progressed from ${prevStatus} to ${newStatus}.`,
       }, client);
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'update_status', id, newStatus }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API updateLeadStatus fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -535,7 +670,7 @@ export const leadService = {
       metaTriggered = true;
     }
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const updated: Lead = {
         ...current,
         lead_status: 'QUALIFIED',
@@ -562,6 +697,30 @@ export const leadService = {
           ? 'Lead marked QUALIFIED! Meta Messaging Conversion event queued.'
           : 'Lead marked QUALIFIED successfully.',
       };
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'qualify', id, criteria, salespersonName }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return {
+              success: true,
+              lead: mapDbRowToLead(json.data as Record<string, unknown>),
+              metaCapiTriggered: Boolean(json.metaCapiTriggered),
+              message: json.message || 'Lead marked QUALIFIED successfully.',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('API qualifyLead fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -628,7 +787,7 @@ export const leadService = {
       ? followUpDate.trim() 
       : null;
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const idx = mockLeadsStore.findIndex((l) => l.id === id);
       if (idx === -1) return null;
       const updated: Lead = {
@@ -647,6 +806,25 @@ export const leadService = {
           : `Follow-up notes updated: ${notes || 'No notes'}`,
       }, client);
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'schedule_follow_up', id, followUpDate: cleanFollowUpDate, notes }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API scheduleFollowUp fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -684,7 +862,7 @@ export const leadService = {
    * Completes a follow-up
    */
   async completeFollowUp(id: string, client?: SupabaseClient): Promise<Lead | null> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const idx = mockLeadsStore.findIndex((l) => l.id === id);
       if (idx === -1) return null;
       const updated: Lead = {
@@ -699,6 +877,25 @@ export const leadService = {
         description: 'Salesperson completed scheduled customer contact.',
       }, client);
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'complete_follow_up', id }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API completeFollowUp fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -732,7 +929,7 @@ export const leadService = {
    * Archives or unarchives a lead
    */
   async archiveLead(id: string, archive = true, client?: SupabaseClient): Promise<Lead | null> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const idx = mockLeadsStore.findIndex((l) => l.id === id);
       if (idx === -1) return null;
       const updated: Lead = {
@@ -742,6 +939,25 @@ export const leadService = {
       };
       mockLeadsStore[idx] = updated;
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ action: 'archive', id, archive }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API archiveLead fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -797,9 +1013,24 @@ export const leadService = {
    * Fetches lead activities from Supabase
    */
   async getLeadActivities(leadId: string, client?: SupabaseClient): Promise<LeadActivity[]> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const list = mockActivitiesStore[leadId] || [];
       return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/admin/leads?activities_for=${encodeURIComponent(leadId)}`, { headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && Array.isArray(json.data)) {
+            return json.data.map((row: Record<string, unknown>) => mapDbRowToActivity(row));
+          }
+        }
+      } catch (err) {
+        console.warn('API getLeadActivities fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -835,10 +1066,29 @@ export const leadService = {
       created_at: new Date().toISOString(),
     };
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const current = mockActivitiesStore[leadId] || [];
       mockActivitiesStore[leadId] = [newAct, ...current];
       return newAct;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'add_activity', leadId, activity }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToActivity(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API addActivity fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -867,8 +1117,23 @@ export const leadService = {
    * Fetches WhatsApp messages for a lead
    */
   async getLeadMessages(leadId: string, client?: SupabaseClient): Promise<WhatsAppMessage[]> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       return mockMessagesStore[leadId] || [];
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/admin/leads?messages_for=${encodeURIComponent(leadId)}`, { headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && Array.isArray(json.data)) {
+            return json.data.map((row: Record<string, unknown>) => mapDbRowToMessage(row));
+          }
+        }
+      } catch (err) {
+        console.warn('API getLeadMessages fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -905,7 +1170,7 @@ export const leadService = {
     },
     client?: SupabaseClient
   ): Promise<WhatsAppMessage> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const recorded: WhatsAppMessage = {
         id: `msg-${Date.now()}`,
         lead_id: msg.leadId || null,
@@ -962,7 +1227,7 @@ export const leadService = {
     errorDetails?: Record<string, unknown>,
     client?: SupabaseClient
   ): Promise<WhatsAppMessage | null> {
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       for (const leadId of Object.keys(mockMessagesStore)) {
         const msg = mockMessagesStore[leadId].find((m) => m.wamid === wamid);
         if (msg) {
@@ -1002,6 +1267,25 @@ export const leadService = {
    * Outbound message dispatcher helper
    */
   async sendWhatsAppMessage(leadId: string, messageBody: string, client?: SupabaseClient): Promise<WhatsAppMessage> {
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'send_whatsapp_message', leadId, messageBody }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToMessage(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API sendWhatsAppMessage fallback to direct client:', err);
+      }
+    }
+
     const lead = await this.getLeadById(leadId, client);
     const toPhone = lead ? lead.phone : 'unknown';
     const wamid = `wamid.outbound.${Date.now()}.${Math.random().toString(36).substring(2, 8)}`;
@@ -1074,7 +1358,7 @@ export const leadService = {
     // Ensure follow_up_date is null if empty string
     newFollowUpDate = (typeof newFollowUpDate === 'string' && newFollowUpDate.trim() !== '') ? newFollowUpDate.trim() : null;
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const updated: Lead = {
         ...current,
         lead_status: newStatus,
@@ -1095,6 +1379,32 @@ export const leadService = {
         metadata: { outcome, telecaller: telecallerName },
       }, client);
       return updated;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            action: 'call_outcome',
+            leadId,
+            outcome,
+            notes,
+            nextFollowUpDate,
+            telecallerName,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API logCallOutcome fallback to direct client:', err);
+      }
     }
 
     const sb = getServiceClient(client);
@@ -1136,7 +1446,7 @@ export const leadService = {
   async reassignLead(leadId: string, staffId: string, staffName: string, staffEmail: string, client?: SupabaseClient): Promise<Lead | null> {
     const isUnassigned = !staffId || staffId === 'unassigned';
 
-    if (!isSupabaseConfigured() && process.env.NODE_ENV === 'test') {
+    if (isTestEnvironment() || !isSupabaseConfigured()) {
       const idx = mockLeadsStore.findIndex((l) => l.id === leadId);
       if (idx === -1) return null;
       const updated: Lead = {
@@ -1154,21 +1464,42 @@ export const leadService = {
       return updated;
     }
 
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/admin/leads', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            action: 'reassign',
+            leadId,
+            staffId,
+            staffName,
+            staffEmail,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapDbRowToLead(json.data as Record<string, unknown>);
+          }
+        }
+      } catch (err) {
+        console.warn('API reassignLead fallback to direct client:', err);
+      }
+    }
+
     const sb = getServiceClient(client);
     const updatePayload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
+      assigned_salesperson_id: isUnassigned ? null : staffId,
     };
-    if (isUnassigned) {
-      updatePayload.assigned_salesperson_id = null;
-    } else if (staffId.length > 20) {
-      updatePayload.assigned_salesperson_id = staffId;
-    }
 
     const { data, error } = await sb
       .from('leads')
       .update(updatePayload)
       .eq('id', leadId)
-      .select()
+      .select('*, profiles:assigned_salesperson_id(id, full_name, email)')
       .maybeSingle();
 
     if (error) {
@@ -1238,4 +1569,67 @@ export const leadService = {
 
     return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
   },
+
+  /**
+   * Permanently deletes a lead and associated activities/messages
+   */
+  async deleteLead(id: string, client?: SupabaseClient): Promise<boolean> {
+    if (!isSupabaseConfigured() || process.env.NODE_ENV === 'test') {
+      const idx = mockLeadsStore.findIndex((l) => l.id === id);
+      if (idx !== -1) {
+        mockLeadsStore.splice(idx, 1);
+        delete mockActivitiesStore[id];
+        delete mockMessagesStore[id];
+        return true;
+      }
+      return false;
+    }
+
+    if (typeof window !== 'undefined' && !client) {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/admin/leads?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers,
+        });
+        if (res.ok) {
+          const idx = mockLeadsStore.findIndex((l) => l.id === id);
+          if (idx !== -1) {
+            mockLeadsStore.splice(idx, 1);
+            delete mockActivitiesStore[id];
+            delete mockMessagesStore[id];
+          }
+          return true;
+        }
+      } catch (err) {
+        console.warn('API deleteLead fallback to direct client:', err);
+      }
+    }
+
+    const sb = getServiceClient(client);
+
+    // Clean up dependent child records safely before deleting parent lead
+    try {
+      await sb.from('lead_activities').delete().eq('lead_id', id);
+      await sb.from('whatsapp_messages').delete().eq('lead_id', id);
+    } catch (cleanErr) {
+      console.warn('Child records cleanup note:', cleanErr);
+    }
+
+    const { error } = await sb.from('leads').delete().eq('id', id);
+    if (error) {
+      throw new Error(`Failed to delete lead from database: ${error.message}`);
+    }
+
+    // Keep mock cache in sync
+    const idx = mockLeadsStore.findIndex((l) => l.id === id);
+    if (idx !== -1) {
+      mockLeadsStore.splice(idx, 1);
+      delete mockActivitiesStore[id];
+      delete mockMessagesStore[id];
+    }
+
+    return true;
+  },
 };
+

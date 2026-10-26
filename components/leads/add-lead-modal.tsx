@@ -130,24 +130,30 @@ export function AddLeadModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-[#0b132b] border border-[#1e293b] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overflow-hidden">
+      <div className="bg-[#0b132b] sm:border border-white/[0.08] rounded-t-[28px] sm:rounded-2xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col relative transition-all">
+        {/* Apple iOS Sheet Grabber for Mobile */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#070d1a] shrink-0">
+          <div className="w-12 h-1.5 rounded-full bg-slate-600/50" />
+        </div>
+
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#1e293b] flex items-center justify-between bg-[#070d1a]">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[#1e293b] flex items-center justify-between bg-[#070d1a] shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-xs shrink-0">
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Create New Travel Lead</h2>
-              <p className="text-xs text-slate-400">Record enquiry details, travel requirements, and follow-up</p>
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Create New Travel Lead</h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">Record customer requirements and consultation schedule</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center transition cursor-pointer active:scale-95"
+            title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -381,20 +387,20 @@ export function AddLeadModal({
             </div>
           )}
 
-          {/* Form Actions */}
-          <div className="pt-4 border-t border-[#1e293b] flex items-center justify-end space-x-3">
+          {/* Form Actions with Mobile Safe-Area */}
+          <div className="pt-4 border-t border-[#1e293b] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:space-x-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)]">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-lg bg-[#111d3d] text-slate-300 hover:text-white text-xs font-semibold transition disabled:opacity-50"
+              className="px-4 py-3 rounded-2xl bg-[#111d3d] text-slate-300 hover:text-white text-xs font-semibold transition disabled:opacity-50 min-h-[44px] flex items-center justify-center cursor-pointer active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 flex items-center space-x-2"
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-[#070d1a] font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2 min-h-[46px] active:scale-95"
             >
               {isSubmitting ? (
                 <>
@@ -402,7 +408,7 @@ export function AddLeadModal({
                   <span>Saving to Database...</span>
                 </>
               ) : (
-                <span>Save & Create Lead</span>
+                <span>Save &amp; Create Lead</span>
               )}
             </button>
           </div>

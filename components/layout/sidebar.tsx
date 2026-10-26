@@ -12,7 +12,8 @@ import {
   LogOut,
   PhoneCall,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  X
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/theme-toggle';
 
@@ -107,13 +108,13 @@ export function Sidebar({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-[#0b132b] border-r border-[#1e293b] flex flex-col shrink-0 transition-transform duration-200 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-[#0b132b] border-r border-[#1e293b] flex flex-col shrink-0 transition-transform duration-200 ease-in-out ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Brand Header */}
         <div className="p-4 border-b border-[#1e293b] flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-xl p-0.5 bg-white/5 border border-emerald-500/30 flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0 overflow-hidden">
               <img 
                 src="/icon.png" 
@@ -131,6 +132,17 @@ export function Sidebar({
               <p className="text-[11px] text-slate-400 font-medium tracking-tight truncate">Luxury Tours &amp; Travel</p>
             </div>
           </div>
+
+          {/* Close button on mobile */}
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 md:hidden cursor-pointer shrink-0 ml-2"
+              title="Close Navigation Menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Current Role Indicator Pill */}

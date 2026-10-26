@@ -14,7 +14,9 @@ import {
   ArrowRight,
   Clock,
   Sparkles,
-  Calendar
+  Calendar,
+  PhoneCall,
+  MessageCircle
 } from 'lucide-react';
 import { Lead, LeadFilters, LeadSource } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
@@ -27,6 +29,8 @@ interface DashboardViewProps {
   onNavigateToFollowUps: () => void;
   onRefresh: () => void;
   currentRole?: 'admin' | 'sales';
+  currentUserName?: string;
+  currentUserId?: string;
   onOpenAddStaffModal?: () => void;
   onNavigateToStaff?: () => void;
 }
@@ -49,6 +53,8 @@ export function DashboardView({
   onNavigateToFollowUps,
   onRefresh,
   currentRole,
+  currentUserName,
+  currentUserId,
   onOpenAddStaffModal,
   onNavigateToStaff,
 }: DashboardViewProps) {
@@ -63,81 +69,108 @@ export function DashboardView({
     return () => clearTimeout(timer);
   }, []);
 
+  const relevantLeads = useMemo(() => {
+    if (currentRole !== 'sales') return leads;
+    return leads.filter((l) => {
+      if (currentUserId && (l.assigned_salesperson_id === currentUserId || l.assigned_salesperson?.id === currentUserId)) {
+        return true;
+      }
+      if (currentUserName && l.assigned_salesperson?.full_name &&
+          l.assigned_salesperson.full_name !== 'Assigned Staff' &&
+          l.assigned_salesperson.full_name.toLowerCase() === currentUserName.toLowerCase()) {
+        return true;
+      }
+      if (currentRole === 'sales' && l.assigned_salesperson_id && !currentUserId) {
+        return true;
+      }
+      return false;
+    });
+  }, [leads, currentRole, currentUserId, currentUserName]);
+
   const filteredMetrics = useMemo(() => {
     const filters: LeadFilters = {
       source: sourceFilter,
       dateRange: dateFilter,
     };
-    return leadService.calculateMetrics(leads, filters);
-  }, [leads, sourceFilter, dateFilter]);
+    return leadService.calculateMetrics(relevantLeads, filters);
+  }, [relevantLeads, sourceFilter, dateFilter]);
 
   // Due / Overdue follow-ups
   const dueFollowUps = useMemo(() => {
-    return leads
+    return relevantLeads
       .filter((l) => l.follow_up_date && !l.follow_up_completed && !l.is_archived)
       .sort((a, b) => new Date(a.follow_up_date!).getTime() - new Date(b.follow_up_date!).getTime())
       .slice(0, 5);
-  }, [leads]);
+  }, [relevantLeads]);
 
   // Recent high intent leads
   const recentLeads = useMemo(() => {
-    return [...leads]
+    return [...relevantLeads]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
-  }, [leads]);
+  }, [relevantLeads]);
 
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     STAGES.forEach((s) => (counts[s.key] = 0));
-    leads.forEach((l) => {
+    relevantLeads.forEach((l) => {
       if (counts[l.lead_status] !== undefined) {
         counts[l.lead_status]++;
       }
     });
     return counts;
-  }, [leads]);
+  }, [relevantLeads]);
 
   return (
     <div className="space-y-6">
       {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0b132b] p-4 rounded-xl border border-[#1e293b]">
+      {/* Filters Bar with Apple Segmented Control */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#0b132b] p-3.5 sm:p-4 rounded-2xl border border-white/[0.08] shadow-sm">
         <div className="flex items-center space-x-2 text-slate-300">
           <Filter className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm font-semibold">Dashboard Filters</span>
+          <span className="text-sm font-bold text-white tracking-tight">Performance Filters</span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {/* Date Filter */}
-          <div className="flex items-center space-x-1.5 bg-[#070d1a] px-3 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | '7days' | '30days' | 'this_month')}
-              className="bg-transparent text-slate-200 outline-none cursor-pointer"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="this_month">This Month</option>
-            </select>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Apple iOS Segmented Control for Date Filter */}
+          <div className="flex items-center space-x-1 p-1 rounded-2xl bg-[#070d1a] border border-white/[0.06] overflow-x-auto scrollbar-none w-full sm:w-auto">
+            {[
+              { key: 'all', label: 'All Time' },
+              { key: 'today', label: 'Today' },
+              { key: '7days', label: '7 Days' },
+              { key: '30days', label: '30 Days' },
+              { key: 'this_month', label: 'This Month' },
+            ].map((d) => (
+              <button
+                key={d.key}
+                type="button"
+                onClick={() => setDateFilter(d.key as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 cursor-pointer flex-1 sm:flex-initial text-center ${
+                  dateFilter === d.key
+                    ? 'bg-[#111d3d] text-emerald-400 font-bold shadow-sm border border-emerald-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
           </div>
 
-          {/* Source Filter */}
-          <div className="flex items-center space-x-1.5 bg-[#070d1a] px-3 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-300">
+          {/* Source Filter Dropdown */}
+          <div className="flex items-center space-x-1.5 bg-[#070d1a] px-3 py-2 rounded-2xl border border-white/[0.06] text-xs text-slate-300">
             <Compass className="w-3.5 h-3.5 text-emerald-400" />
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value as LeadSource | 'ALL')}
               className="bg-transparent text-slate-200 outline-none cursor-pointer"
             >
-              <option value="ALL">All Sources</option>
+              <option value="ALL">All Channels</option>
               <option value="WhatsApp">WhatsApp</option>
               <option value="Instagram">Instagram</option>
               <option value="Facebook">Facebook</option>
               <option value="website">Website</option>
               <option value="referral">Referral</option>
-              <option value="manual">Manual Entry</option>
+              <option value="manual">Manual</option>
             </select>
           </div>
 
@@ -147,7 +180,7 @@ export function DashboardView({
                 setSourceFilter('ALL');
                 setDateFilter('all');
               }}
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline"
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold underline px-2 cursor-pointer active:scale-95"
             >
               Reset
             </button>
@@ -155,105 +188,119 @@ export function DashboardView({
         </div>
       </div>
 
-      {/* Primary KPI Cards Grid (7 Key Metrics) */}
+      {/* Primary KPI Cards Grid (Apple HIG squircle cards with tactile feedback) */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {/* 1. Total Leads */}
         <div 
           onClick={() => onNavigateToLeads()}
-          className="bg-[#0b132b] p-4 rounded-xl border border-[#1e293b] hover:border-slate-700 transition cursor-pointer group"
+          className="bg-[#0b132b] p-4 rounded-2xl border border-white/[0.08] hover:border-emerald-500/30 transition-all cursor-pointer group shadow-sm active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-400">Total Leads</span>
-            <Users className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 transition" />
+            <span className="text-xs font-semibold text-slate-400">Total Leads</span>
+            <div className="w-7 h-7 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-emerald-400 group-hover:bg-emerald-500/10 transition">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-white tracking-tight">
+          <div className="text-2xl font-extrabold text-white tracking-tight">
             {filteredMetrics.totalLeads}
           </div>
-          <p className="text-[10px] text-slate-500 mt-1">Across all channels</p>
+          <p className="text-[10px] text-slate-500 mt-1 font-medium">Across all channels</p>
         </div>
 
         {/* 2. New Leads */}
         <div 
           onClick={() => onNavigateToLeads('NEW')}
-          className="bg-[#0b132b] p-4 rounded-xl border border-[#1e293b] hover:border-blue-500/40 transition cursor-pointer group"
+          className="bg-[#0b132b] p-4 rounded-2xl border border-blue-500/25 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-blue-400">New Leads</span>
-            <UserPlus className="w-4 h-4 text-blue-400" />
+            <span className="text-xs font-semibold text-blue-400">New Leads</span>
+            <div className="w-7 h-7 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400">
+              <UserPlus className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-blue-300 tracking-tight">
+          <div className="text-2xl font-extrabold text-blue-300 tracking-tight">
             {filteredMetrics.newLeads}
           </div>
-          <p className="text-[10px] text-blue-400/70 mt-1">Awaiting contact</p>
+          <p className="text-[10px] text-blue-400/80 mt-1 font-medium">Awaiting contact</p>
         </div>
 
         {/* 3. Qualified Leads */}
         <div 
           onClick={() => onNavigateToLeads('QUALIFIED')}
-          className="bg-gradient-to-br from-[#0b132b] to-[#0e2427] p-4 rounded-xl border border-emerald-500/30 hover:border-emerald-500/60 transition cursor-pointer group shadow-sm shadow-emerald-500/10"
+          className="bg-gradient-to-br from-[#0b132b] to-[#0e2427] p-4 rounded-2xl border border-emerald-500/35 hover:border-emerald-500/60 transition-all cursor-pointer group shadow-md shadow-emerald-500/10 active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-emerald-400">Qualified</span>
-            <Award className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-emerald-400">Qualified</span>
+            <div className="w-7 h-7 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-300">
+              <Award className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-300 tracking-tight">
+          <div className="text-2xl font-extrabold text-emerald-300 tracking-tight">
             {filteredMetrics.qualifiedLeads}
           </div>
-          <p className="text-[10px] text-emerald-400/80 mt-1">Sales confirmed</p>
+          <p className="text-[10px] text-emerald-400/90 mt-1 font-medium">Sales confirmed</p>
         </div>
 
         {/* 4. Follow-ups Due */}
         <div 
           onClick={onNavigateToFollowUps}
-          className="bg-[#0b132b] p-4 rounded-xl border border-amber-500/20 hover:border-amber-500/50 transition cursor-pointer group"
+          className="bg-[#0b132b] p-4 rounded-2xl border border-amber-500/25 hover:border-amber-500/50 transition-all cursor-pointer group shadow-sm active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-amber-400">Follow-ups Due</span>
-            <CalendarClock className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-semibold text-amber-400">Call Queue</span>
+            <div className="w-7 h-7 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400">
+              <CalendarClock className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-amber-300 tracking-tight">
+          <div className="text-2xl font-extrabold text-amber-300 tracking-tight">
             {filteredMetrics.followUpsDue}
           </div>
-          <p className="text-[10px] text-amber-400/70 mt-1">Action required</p>
+          <p className="text-[10px] text-amber-400/80 mt-1 font-medium">Action required</p>
         </div>
 
         {/* 5. Bookings Confirmed */}
         <div 
           onClick={() => onNavigateToLeads('BOOKED')}
-          className="bg-[#0b132b] p-4 rounded-xl border border-[#1e293b] hover:border-cyan-500/40 transition cursor-pointer group"
+          className="bg-[#0b132b] p-4 rounded-2xl border border-cyan-500/25 hover:border-cyan-500/50 transition-all cursor-pointer group shadow-sm active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-cyan-400">Booked</span>
-            <CreditCard className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-semibold text-cyan-400">Booked</span>
+            <div className="w-7 h-7 rounded-xl bg-cyan-500/15 flex items-center justify-center text-cyan-400">
+              <CreditCard className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-cyan-300 tracking-tight">
+          <div className="text-2xl font-extrabold text-cyan-300 tracking-tight">
             {filteredMetrics.bookingsConfirmed}
           </div>
-          <p className="text-[10px] text-cyan-400/70 mt-1">Advance received</p>
+          <p className="text-[10px] text-cyan-400/80 mt-1 font-medium">Advance received</p>
         </div>
 
         {/* 6. Completed Bookings */}
         <div 
           onClick={() => onNavigateToLeads('COMPLETED')}
-          className="bg-[#0b132b] p-4 rounded-xl border border-[#1e293b] hover:border-green-500/40 transition cursor-pointer group"
+          className="bg-[#0b132b] p-4 rounded-2xl border border-green-500/25 hover:border-green-500/50 transition-all cursor-pointer group shadow-sm active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-green-400">Completed</span>
-            <CheckCircle2 className="w-4 h-4 text-green-400" />
+            <span className="text-xs font-semibold text-green-400">Completed</span>
+            <div className="w-7 h-7 rounded-xl bg-green-500/15 flex items-center justify-center text-green-400">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-green-300 tracking-tight">
+          <div className="text-2xl font-extrabold text-green-300 tracking-tight">
             {filteredMetrics.completedBookings}
           </div>
-          <p className="text-[10px] text-green-400/70 mt-1">Tour fulfilled</p>
+          <p className="text-[10px] text-green-400/80 mt-1 font-medium">Tour fulfilled</p>
         </div>
 
         {/* 7. Conversion Rate */}
-        <div className="bg-gradient-to-br from-[#0b132b] to-[#12233f] p-4 rounded-xl border border-teal-500/30">
+        <div className="bg-gradient-to-br from-[#0b132b] to-[#12233f] p-4 rounded-2xl border border-teal-500/35 shadow-sm col-span-2 md:col-span-4 lg:col-span-1">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-teal-300">Conversion</span>
-            <TrendingUp className="w-4 h-4 text-teal-400" />
+            <span className="text-xs font-semibold text-teal-300">Conversion</span>
+            <div className="w-7 h-7 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-400">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-white tracking-tight">
+          <div className="text-2xl font-extrabold text-white tracking-tight">
             {filteredMetrics.conversionRate}%
           </div>
           <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
@@ -399,16 +446,33 @@ export function DashboardView({
                       </div>
                     </div>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        leadService.completeFollowUp(item.id);
-                        onRefresh();
-                      }}
-                      className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium transition cursor-pointer"
-                    >
-                      Done
-                    </button>
+                    <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                      <a
+                        href={`tel:+${item.phone}`}
+                        className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-black border border-emerald-500/30 transition min-w-[32px] min-h-[32px] flex items-center justify-center"
+                        title={`Call ${item.name}`}
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                      </a>
+                      <a
+                        href={`https://wa.me/${item.phone}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500 text-teal-400 hover:text-black border border-teal-500/30 transition min-w-[32px] min-h-[32px] flex items-center justify-center"
+                        title={`WhatsApp ${item.name}`}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        onClick={() => {
+                          leadService.completeFollowUp(item.id);
+                          onRefresh();
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold transition cursor-pointer min-h-[32px]"
+                      >
+                        Done
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -464,22 +528,42 @@ export function DashboardView({
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                      item.lead_status === 'QUALIFIED'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                        : item.lead_status === 'BOOKED'
-                        ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                        : item.lead_status === 'NEW'
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                        : 'bg-slate-800 text-slate-300 border border-slate-700'
-                    }`}
-                  >
-                    {item.lead_status}
-                  </span>
-                  <div className="text-[10px] text-slate-500 mt-1">
-                    {new Date(item.created_at).toLocaleDateString()}
+                <div className="flex items-center space-x-2 shrink-0">
+                  <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                    <a
+                      href={`tel:+${item.phone}`}
+                      className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-black border border-emerald-500/30 transition min-w-[32px] min-h-[32px] flex items-center justify-center"
+                      title={`Call ${item.name}`}
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                    </a>
+                    <a
+                      href={`https://wa.me/${item.phone}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500 text-teal-400 hover:text-black border border-teal-500/30 transition min-w-[32px] min-h-[32px] flex items-center justify-center"
+                      title={`WhatsApp ${item.name}`}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                        item.lead_status === 'QUALIFIED'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : item.lead_status === 'BOOKED'
+                          ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                          : item.lead_status === 'NEW'
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}
+                    >
+                      {item.lead_status}
+                    </span>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
               </div>

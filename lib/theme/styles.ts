@@ -593,4 +593,25 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
 html:not(.dark) ::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
+
+/* 12. Apple Mobile Navigation Bar Light Mode */
+html.light nav[aria-label="Mobile Navigation"],
+html[data-theme="light"] nav[aria-label="Mobile Navigation"],
+html:not(.dark) nav[aria-label="Mobile Navigation"] {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-top-color: #e2e8f0 !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light nav[aria-label="Mobile Navigation"] button,
+html[data-theme="light"] nav[aria-label="Mobile Navigation"] button,
+html:not(.dark) nav[aria-label="Mobile Navigation"] button {
+  color: #64748b;
+}
+
+html.light nav[aria-label="Mobile Navigation"] button.text-emerald-400,
+html[data-theme="light"] nav[aria-label="Mobile Navigation"] button.text-emerald-400,
+html:not(.dark) nav[aria-label="Mobile Navigation"] button.text-emerald-400 {
+  color: #059669 !important;
+}
 `;

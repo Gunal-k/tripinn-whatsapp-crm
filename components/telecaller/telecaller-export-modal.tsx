@@ -44,7 +44,7 @@ export function TelecallerExportModal({
     if (selectedTelecaller !== 'ALL') {
       list = list.filter(
         (l) =>
-          l.assigned_salesperson?.full_name === selectedTelecaller ||
+          (l.assigned_salesperson?.full_name && l.assigned_salesperson.full_name.toLowerCase() === selectedTelecaller.toLowerCase()) ||
           (selectedTelecaller === 'Unassigned' && !l.assigned_salesperson_id)
       );
     }

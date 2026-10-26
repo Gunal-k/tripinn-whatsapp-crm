@@ -95,31 +95,37 @@ export function CallOutcomeModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-      <div className="bg-[#0b132b] border border-[#1e293b] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overflow-hidden">
+      <div className="bg-[#0b132b] sm:border border-white/[0.08] rounded-t-[28px] sm:rounded-2xl w-full max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto shadow-2xl relative transition-all">
+        {/* Apple iOS Sheet Grabber for Mobile */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#070d1a] shrink-0">
+          <div className="w-12 h-1.5 rounded-full bg-slate-600/50" />
+        </div>
+
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#1e293b] bg-[#070d1a] flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+        <div className="px-5 sm:px-6 py-4 border-b border-[#1e293b] bg-[#070d1a] flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-xs shrink-0">
               <PhoneCall className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Log Call Outcome</h2>
+              <h2 className="text-base font-bold text-white tracking-tight">Log Call Outcome</h2>
               <p className="text-xs text-slate-400">
-                {lead.name} • {formatPhoneDisplay(lead.phone)}
+                {lead.name} • <span className="font-mono text-slate-300">{formatPhoneDisplay(lead.phone)}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center transition cursor-pointer active:scale-95"
+            title="Close Modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 pb-[max(env(safe-area-inset-bottom,0px),1.25rem)]">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">
               Select Call Outcome
@@ -133,10 +139,10 @@ export function CallOutcomeModal({
                     key={item.key}
                     type="button"
                     onClick={() => setOutcome(item.key)}
-                    className={`p-2.5 rounded-xl border text-left flex items-center space-x-2.5 transition cursor-pointer ${
+                    className={`p-3 rounded-2xl border text-left flex items-center space-x-3 transition cursor-pointer min-h-[46px] active:scale-95 ${
                       isSelected
-                        ? `${item.color} ring-1 ring-emerald-400`
-                        : 'bg-[#070d1a] border-[#1e293b] text-slate-300 hover:border-slate-700'
+                        ? `${item.color} ring-2 ring-emerald-400/50 shadow-md`
+                        : 'bg-[#070d1a] border-white/[0.06] text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
@@ -149,8 +155,8 @@ export function CallOutcomeModal({
 
           {/* Callback Date Picker if Callback Requested */}
           {outcome === 'CALLBACK_REQUESTED' && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
-              <label className="block text-xs font-bold text-amber-300 mb-1">
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 shadow-sm">
+              <label className="block text-xs font-bold text-amber-300">
                 Scheduled Callback Date &amp; Time
               </label>
               <DateTimePicker
@@ -165,7 +171,7 @@ export function CallOutcomeModal({
 
           {/* Call Remarks */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Staff Call Notes &amp; Client Feedback
             </label>
             <textarea
@@ -173,23 +179,23 @@ export function CallOutcomeModal({
               placeholder="e.g. Client confirmed 2 adults for Bali in mid-Nov. Requested 4-star vs 5-star pricing comparison."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-[#070d1a] border border-white/[0.08] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed"
             />
           </div>
 
           {/* Action buttons */}
-          <div className="pt-3 border-t border-[#1e293b] flex items-center justify-end space-x-3">
+          <div className="pt-3 border-t border-[#1e293b] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-[#111d3d] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+              className="px-4 py-3 rounded-2xl bg-[#111d3d] text-slate-300 hover:text-white text-xs font-semibold transition cursor-pointer min-h-[44px] flex items-center justify-center active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-1.5 min-h-[46px] active:scale-95"
             >
               {isSubmitting ? (
                 <>

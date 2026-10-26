@@ -13,7 +13,8 @@ import {
   PhoneCall,
   MessageCircle,
   FileSpreadsheet,
-  UserCheck
+  UserCheck,
+  Trash2
 } from 'lucide-react';
 import { Lead, LeadFilters, LeadPipelineStage, LeadSource, QualificationStatus, UserProfile } from '../../lib/types/crm';
 import { leadService } from '../../lib/services/leads';
@@ -31,6 +32,7 @@ interface LeadsViewProps {
   initialStatusFilter?: string;
   currentRole?: 'admin' | 'sales';
   currentUserName?: string;
+  currentUserId?: string;
 }
 
 export function LeadsView({
@@ -41,6 +43,7 @@ export function LeadsView({
   initialStatusFilter,
   currentRole = 'admin',
   currentUserName = 'Priya Sharma',
+  currentUserId = '',
 }: LeadsViewProps) {
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [search, setSearch] = useState('');
@@ -55,12 +58,26 @@ export function LeadsView({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [leadForCallOutcome, setLeadForCallOutcome] = useState<Lead | null>(null);
 
+  const getStaffDisplayName = (lead: Lead): string => {
+    if (lead.assigned_salesperson?.full_name && lead.assigned_salesperson.full_name !== 'Assigned Staff') {
+      return lead.assigned_salesperson.full_name;
+    }
+    const match = staffList.find((s) => s.id === lead.assigned_salesperson_id);
+    if (match) return match.full_name;
+    if (currentUserId && lead.assigned_salesperson_id === currentUserId) return currentUserName || 'My Lead';
+    return lead.assigned_salesperson_id ? 'Assigned Staff' : 'Unassigned';
+  };
+
   const unassignedCount = useMemo(
     () => leads.filter((l) => !l.assigned_salesperson_id).length,
     [leads]
   );
 
   const handleQuickAssign = async (leadId: string, newStaffId: string) => {
+    if (currentRole !== 'admin') {
+      showToast('Only administrators can assign leads.', 'error');
+      return;
+    }
     try {
       if (!newStaffId || newStaffId === 'unassigned') {
         await leadService.reassignLead(leadId, '', 'Unassigned', '');
@@ -78,13 +95,37 @@ export function LeadsView({
     }
   };
 
+  const handleDeleteLead = async (lead: Lead) => {
+    if (currentRole !== 'admin') {
+      showToast('Only administrators can delete leads.', 'error');
+      return;
+    }
+    try {
+      const { showConfirmDialog } = await import('../../lib/utils/swal');
+      const confirmed = await showConfirmDialog({
+        title: 'Delete this Lead?',
+        text: `Are you sure you want to permanently delete "${lead.name}"? This action cannot be undone.`,
+        confirmButtonText: 'Yes, Delete Lead',
+        cancelButtonText: 'Cancel',
+        isDanger: true,
+      });
+      if (!confirmed) return;
+
+      await leadService.deleteLead(lead.id);
+      showToast('Lead deleted successfully.', 'success');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete lead', 'error');
+    }
+  };
+
   useEffect(() => {
     let active = true;
     staffService
       .getStaffMembers()
       .then((list) => {
         if (active) {
-          setStaffList(list.filter((s) => s.is_active && s.role !== 'admin'));
+          setStaffList(list.filter((s) => s.is_active));
         }
       })
       .catch((err) => {
@@ -122,13 +163,34 @@ export function LeadsView({
     }
 
     if (onlyMyLeads) {
-      list = list.filter(
-        (l) => l.assigned_salesperson?.full_name === currentUserName || !l.assigned_salesperson_id
-      );
+      list = list.filter((l) => {
+        // 1. Direct match with current user's profile ID
+        if (currentUserId && (l.assigned_salesperson_id === currentUserId || l.assigned_salesperson?.id === currentUserId)) {
+          return true;
+        }
+        // 2. Match with current user's full name
+        if (currentUserName && l.assigned_salesperson?.full_name &&
+            l.assigned_salesperson.full_name !== 'Assigned Staff' &&
+            l.assigned_salesperson.full_name.toLowerCase() === currentUserName.toLowerCase()) {
+          return true;
+        }
+        // 3. Match with staffList entry by ID
+        const staffObj = staffList.find((s) => s.id === l.assigned_salesperson_id);
+        if (staffObj && currentUserName && staffObj.full_name.toLowerCase() === currentUserName.toLowerCase()) {
+          return true;
+        }
+        // 4. In sales role, if this lead is assigned and returned to sales staff session
+        if (currentRole === 'sales' && l.assigned_salesperson_id) {
+          if (!currentUserId || l.assigned_salesperson_id === currentUserId) {
+            return true;
+          }
+        }
+        return false;
+      });
     }
 
     return list;
-  }, [leads, search, statusFilter, sourceFilter, qualificationFilter, selectedStaffFilter, currentRole, onlyMyLeads, currentUserName]);
+  }, [leads, search, statusFilter, sourceFilter, qualificationFilter, selectedStaffFilter, currentRole, onlyMyLeads, currentUserName, currentUserId, staffList]);
 
   const handleExportExcel = () => {
     exportTelecallerExcelSheet(filteredLeads, {
@@ -193,8 +255,51 @@ export function LeadsView({
         </div>
       )}
 
+      {/* Apple-style Swipeable Stage Filters Carousel */}
+      <div className="flex items-center space-x-2 overflow-x-auto scrollbar-none pb-1 shrink-0">
+        <button
+          onClick={() => setStatusFilter('ALL')}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer flex items-center space-x-1.5 ${
+            statusFilter === 'ALL'
+              ? 'bg-emerald-500 text-[#070d1a] font-bold shadow-md shadow-emerald-500/25'
+              : 'bg-[#0b132b] text-slate-300 border border-white/[0.08] hover:text-white'
+          }`}
+        >
+          <span>All Stages</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+            statusFilter === 'ALL' ? 'bg-black/20 text-[#070d1a]' : 'bg-[#111d3d] text-slate-400'
+          }`}>
+            {leads.length}
+          </span>
+        </button>
+        {stages.map((stg) => {
+          const count = leads.filter((l) => l.lead_status === stg).length;
+          const isSelected = statusFilter === stg;
+          return (
+            <button
+              key={stg}
+              onClick={() => setStatusFilter(stg)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer flex items-center space-x-1.5 ${
+                isSelected
+                  ? 'bg-emerald-500 text-[#070d1a] font-bold shadow-md shadow-emerald-500/25'
+                  : 'bg-[#0b132b] text-slate-300 border border-white/[0.08] hover:text-white'
+              }`}
+            >
+              <span>{stg.replace('_', ' ')}</span>
+              {count > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected ? 'bg-black/20 text-[#070d1a]' : 'bg-[#111d3d] text-slate-400'
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Search and Action Bar */}
-      <div className="bg-[#0b132b] p-4 rounded-xl border border-[#1e293b] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+      <div className="bg-[#0b132b] p-3.5 sm:p-4 rounded-2xl border border-white/[0.08] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4 shadow-sm">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -203,7 +308,7 @@ export function LeadsView({
             placeholder="Search customer name, phone, destination..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 min-h-[40px]"
           />
         </div>
 
@@ -213,7 +318,7 @@ export function LeadsView({
           {currentRole === 'admin' && (
             <button
               onClick={() => setOnlyMyLeads(!onlyMyLeads)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition cursor-pointer min-h-[38px] ${
                 onlyMyLeads
                   ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                   : 'bg-[#070d1a] text-slate-400 border-[#1e293b] hover:text-white'
@@ -227,7 +332,7 @@ export function LeadsView({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as LeadPipelineStage | 'ALL')}
-            className="px-2.5 py-1.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer min-h-[38px]"
           >
             <option value="ALL">All Stages</option>
             {stages.map((stg) => (
@@ -239,7 +344,7 @@ export function LeadsView({
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value as LeadSource | 'ALL')}
-            className="px-2.5 py-1.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer min-h-[38px]"
           >
             <option value="ALL">All Sources</option>
             <option value="WhatsApp">WhatsApp</option>
@@ -254,7 +359,7 @@ export function LeadsView({
           <select
             value={qualificationFilter}
             onChange={(e) => setQualificationFilter(e.target.value as QualificationStatus | 'ALL')}
-            className="px-2.5 py-1.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer min-h-[38px]"
           >
             <option value="ALL">All Qualifications</option>
             <option value="QUALIFIED">Qualified Only</option>
@@ -268,7 +373,7 @@ export function LeadsView({
             <select
               value={selectedStaffFilter}
               onChange={(e) => setSelectedStaffFilter(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="px-3 py-2 rounded-lg bg-[#070d1a] border border-[#1e293b] text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer min-h-[38px]"
             >
               <option value="ALL">All Staff</option>
               <option value="UNASSIGNED">Unassigned Leads</option>
@@ -284,7 +389,7 @@ export function LeadsView({
           {currentRole === 'admin' && unassignedCount > 0 && (
             <button
               onClick={() => setSelectedStaffFilter((prev) => (prev === 'UNASSIGNED' ? 'ALL' : 'UNASSIGNED'))}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer min-h-[38px] ${
                 selectedStaffFilter === 'UNASSIGNED'
                   ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
                   : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30'
@@ -297,17 +402,17 @@ export function LeadsView({
           )}
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-[#070d1a] p-1 rounded-lg border border-[#1e293b]">
+          <div className="flex items-center bg-[#070d1a] p-1 rounded-lg border border-[#1e293b] min-h-[38px]">
             <button
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded cursor-pointer ${viewMode === 'table' ? 'bg-[#111d3d] text-emerald-400' : 'text-slate-400'}`}
+              className={`p-2 rounded cursor-pointer ${viewMode === 'table' ? 'bg-[#111d3d] text-emerald-400' : 'text-slate-400'}`}
               title="Table View"
             >
               <TableIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-1.5 rounded cursor-pointer ${viewMode === 'kanban' ? 'bg-[#111d3d] text-emerald-400' : 'text-slate-400'}`}
+              className={`p-2 rounded cursor-pointer ${viewMode === 'kanban' ? 'bg-[#111d3d] text-emerald-400' : 'text-slate-400'}`}
               title="Pipeline Kanban View"
             >
               <Kanban className="w-3.5 h-3.5" />
@@ -317,7 +422,7 @@ export function LeadsView({
           {/* Export Staff Excel Sheet */}
           <button
             onClick={handleExportExcel}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer min-h-[38px]"
             title="Download formatted Excel calling sheet (.xlsx) for staff"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
@@ -327,7 +432,7 @@ export function LeadsView({
           {/* Export CSV */}
           <button
             onClick={handleExportCsv}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-[#111d3d] hover:bg-[#192b56] text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-2.5 py-2 rounded-lg bg-[#111d3d] hover:bg-[#192b56] text-slate-300 text-xs font-semibold border border-slate-700 transition cursor-pointer min-h-[38px]"
             title="Download CSV export"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -337,7 +442,7 @@ export function LeadsView({
           {/* Add Lead */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] text-xs font-bold transition shadow-xs cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#070d1a] text-xs font-bold transition shadow-xs cursor-pointer min-h-[38px] active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Lead</span>
@@ -347,7 +452,215 @@ export function LeadsView({
 
       {/* Leads Table View */}
       {viewMode === 'table' ? (
-        <div className="bg-[#0b132b] rounded-xl border border-[#1e293b] overflow-hidden">
+        <>
+          {/* Mobile Lead Cards (Visible on mobile viewports for easy 1-touch thumb access) */}
+          <div className="block md:hidden space-y-3.5">
+            {filteredLeads.length === 0 ? (
+              <div className="bg-[#0b132b] p-8 rounded-2xl border border-white/[0.08] text-center text-slate-400 text-xs shadow-sm">
+                No leads match your criteria. Try adjusting your filters or tap &ldquo;+ New Lead&rdquo; to add one.
+              </div>
+            ) : (
+              filteredLeads.map((item) => {
+                const isOverdue =
+                  currentTime > 0 &&
+                  item.follow_up_date &&
+                  !item.follow_up_completed &&
+                  new Date(item.follow_up_date).getTime() < currentTime;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => onSelectLead(item)}
+                    className="bg-[#0b132b]/95 backdrop-blur-md rounded-2xl border border-white/[0.08] p-4 space-y-3.5 shadow-md active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    {/* Top Row: Customer Avatar, Name, Badges, Stage */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-start space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/35 flex items-center justify-center font-bold text-xs text-emerald-300 shrink-0 shadow-xs mt-0.5">
+                          {item.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <h3 className="font-bold text-sm text-white tracking-tight truncate max-w-[170px]">
+                              {item.name}
+                            </h3>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#111d3d] text-emerald-400 font-semibold border border-emerald-500/20">
+                              {item.lead_source}
+                            </span>
+                            {item.ctwa_clid && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center space-x-1">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>CTWA</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-300 font-mono mt-0.5">
+                            {formatPhoneDisplay(item.phone)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stage & Qualification Badge */}
+                      <div className="flex flex-col items-end space-y-1 shrink-0">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.lead_status === 'QUALIFIED'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : item.lead_status === 'BOOKED'
+                              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                              : item.lead_status === 'PAYMENT_PENDING'
+                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                              : item.lead_status === 'NEW'
+                              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                              : item.lead_status === 'LOST'
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          }`}
+                        >
+                          {item.lead_status}
+                        </span>
+                        {item.qualification_status === 'QUALIFIED' && (
+                          <span className="flex items-center space-x-1 text-emerald-400 font-bold text-[10px]">
+                            <Award className="w-3 h-3" />
+                            <span>Qualified</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Destination & Budget Inset Banner */}
+                    <div className="bg-[#070d1a] p-3 rounded-xl border border-white/[0.05] flex items-center justify-between text-xs">
+                      <div className="min-w-0 pr-2">
+                        <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">Destination</span>
+                        <span className="font-bold text-white text-xs truncate block mt-0.5">
+                          {item.interested_destination || 'General Travel Enquiry'}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">Budget</span>
+                        <span className="font-extrabold text-emerald-400 text-xs sm:text-sm block mt-0.5">
+                          {item.estimated_budget
+                            ? `₹${Number(item.estimated_budget).toLocaleString('en-IN')}`
+                            : 'Unquoted'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Staff Assignment & Follow-up status */}
+                    <div className="flex items-center justify-between gap-2 text-xs pt-0.5">
+                      <div onClick={(e) => e.stopPropagation()} className="min-w-0">
+                        {currentRole === 'admin' ? (
+                          <div className="flex items-center space-x-1 bg-[#070d1a] border border-white/[0.06] rounded-xl px-2.5 py-1">
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="text-[10px] text-slate-400">Staff:</span>
+                            <select
+                              value={item.assigned_salesperson_id || 'unassigned'}
+                              onChange={(e) => handleQuickAssign(item.id, e.target.value)}
+                              className="bg-transparent text-[11px] font-semibold text-emerald-400 focus:outline-none cursor-pointer max-w-[120px] truncate"
+                              title="Quick Assign Staff Member"
+                            >
+                              <option value="unassigned" className="bg-[#0b132b] text-amber-400">
+                                Unassigned
+                              </option>
+                              {staffList.map((s) => (
+                                <option key={s.id} value={s.id} className="bg-[#0b132b] text-white">
+                                  {s.full_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <span className="text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20 text-[11px]">
+                            Staff: {getStaffDisplayName(item)}
+                          </span>
+                        )}
+                      </div>
+
+                      {item.follow_up_date && (
+                        <div className="text-right text-[11px] shrink-0">
+                          <span
+                            className={`font-semibold ${
+                              item.follow_up_completed
+                                ? 'text-slate-400 line-through'
+                                : isOverdue
+                                ? 'text-rose-400 font-bold'
+                                : 'text-amber-400'
+                            }`}
+                          >
+                            {isOverdue && '⚠️ '}
+                            {new Date(item.follow_up_date).toLocaleDateString([], {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* TOUCH ACTION BUTTONS ROW (Apple HIG 44px+ touch targets) */}
+                    <div
+                      className="pt-2 border-t border-white/[0.06] flex items-center gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Direct Phone Dial */}
+                      <a
+                        href={`tel:+${item.phone}`}
+                        className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500 hover:to-teal-500 text-emerald-400 hover:text-black border border-emerald-500/35 text-xs font-bold transition active:scale-95 min-h-[44px]"
+                        title={`Call ${item.name}`}
+                      >
+                        <PhoneCall className="w-4 h-4 shrink-0" />
+                        <span>Call</span>
+                      </a>
+
+                      {/* WhatsApp Chat */}
+                      <a
+                        href={`https://wa.me/${item.phone}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-500/20 to-cyan-500/20 hover:from-teal-500 hover:to-cyan-500 text-teal-400 hover:text-black border border-teal-500/35 text-xs font-bold transition active:scale-95 min-h-[44px]"
+                        title={`WhatsApp ${item.name}`}
+                      >
+                        <MessageCircle className="w-4 h-4 shrink-0" />
+                        <span>WhatsApp</span>
+                      </a>
+
+                      {/* Log Call Outcome */}
+                      <button
+                        onClick={() => setLeadForCallOutcome(item)}
+                        className="px-3.5 py-2.5 rounded-2xl bg-[#111d3d] hover:bg-[#1a2c5a] text-slate-200 border border-white/[0.08] text-xs font-bold transition active:scale-95 min-h-[44px]"
+                        title="Log Call Outcome"
+                      >
+                        Log Call
+                      </button>
+
+                      {/* View Lead Dialog */}
+                      <button
+                        onClick={() => onSelectLead(item)}
+                        className="p-2.5 rounded-2xl bg-[#070d1a] border border-white/[0.08] text-slate-300 hover:text-emerald-400 transition active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title="View Full Profile"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+
+                      {/* Delete Lead (Admin Only) */}
+                      {currentRole === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteLead(item)}
+                          className="p-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 transition active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          title="Delete Lead"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table View (Hidden on mobile) */}
+          <div className="hidden md:block bg-[#0b132b] rounded-xl border border-[#1e293b] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#070d1a] text-slate-400 border-b border-[#1e293b] uppercase text-[10px] tracking-wider font-semibold">
@@ -413,7 +726,7 @@ export function LeadsView({
                               </div>
                             ) : (
                               <span className="text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                                Staff: {item.assigned_salesperson?.full_name || 'Unassigned'}
+                                Staff: {getStaffDisplayName(item)}
                               </span>
                             )}
                           </div>
@@ -530,17 +843,20 @@ export function LeadsView({
                           )}
                         </td>
 
-                        {/* Actions: Log Call & Profile */}
+                        {/* Actions: Log Call & Profile & Delete */}
                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end space-x-1.5">
-                            <button
-                              onClick={() => onSelectLead(item)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-xs font-bold border border-emerald-500/30 transition cursor-pointer flex items-center space-x-1"
-                              title="Assign or reassign this lead"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" />
-                              <span>Assign</span>
-                            </button>
+                            {/* Assign Button (Admin Only) */}
+                            {currentRole === 'admin' && (
+                              <button
+                                onClick={() => onSelectLead(item)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-xs font-bold border border-emerald-500/30 transition cursor-pointer flex items-center space-x-1"
+                                title="Assign or reassign this lead"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Assign</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => setLeadForCallOutcome(item)}
                               className="px-2.5 py-1 rounded-lg bg-[#111d3d] hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-200 text-xs font-semibold border border-slate-700 transition cursor-pointer"
@@ -555,6 +871,16 @@ export function LeadsView({
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
+                            {/* Delete Button (Admin Only) */}
+                            {currentRole === 'admin' && (
+                              <button
+                                onClick={() => handleDeleteLead(item)}
+                                className="p-1 rounded-lg bg-[#070d1a] border border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-500/50 hover:bg-rose-500/10 transition cursor-pointer"
+                                title="Delete Lead"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -565,6 +891,7 @@ export function LeadsView({
             </table>
           </div>
         </div>
+        </>
       ) : (
         /* Kanban Pipeline View */
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -627,7 +954,7 @@ export function LeadsView({
                             </div>
                           ) : (
                             <span className="text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 truncate">
-                              Staff: {item.assigned_salesperson?.full_name || 'Unassigned'}
+                              Staff: {getStaffDisplayName(item)}
                             </span>
                           )}
                         </div>
@@ -640,13 +967,25 @@ export function LeadsView({
                           )}
                         </div>
                         <div className="mt-2 pt-1 border-t border-slate-800/60 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-                          <a
-                            href={`tel:+${item.phone}`}
-                            className="text-[10px] text-emerald-400 hover:underline flex items-center space-x-1"
-                          >
-                            <PhoneCall className="w-3 h-3" />
-                            <span>Call</span>
-                          </a>
+                          <div className="flex items-center space-x-2">
+                            <a
+                              href={`tel:+${item.phone}`}
+                              className="text-[10px] text-emerald-400 hover:underline flex items-center space-x-1"
+                            >
+                              <PhoneCall className="w-3 h-3" />
+                              <span>Call</span>
+                            </a>
+                            {/* Delete Lead (Admin Only) */}
+                            {currentRole === 'admin' && (
+                              <button
+                                onClick={() => handleDeleteLead(item)}
+                                className="text-slate-500 hover:text-rose-400 p-0.5 transition cursor-pointer"
+                                title="Delete Lead"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                           <button
                             onClick={() => setLeadForCallOutcome(item)}
                             className="text-[10px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-[#111d3d]"

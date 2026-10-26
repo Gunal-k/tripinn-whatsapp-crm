@@ -17,9 +17,10 @@ export function exportTelecallerExcelSheet(leads: Lead[], options?: TelecallerEx
   let callingList = [...leads];
 
   if (options?.telecallerName && options.telecallerName !== 'ALL') {
+    const targetTelecaller = options.telecallerName.toLowerCase();
     callingList = callingList.filter(
-      (l) => l.assigned_salesperson?.full_name === options.telecallerName ||
-             (options.telecallerName === 'Unassigned' && !l.assigned_salesperson_id)
+      (l) => (l.assigned_salesperson?.full_name && l.assigned_salesperson.full_name.toLowerCase() === targetTelecaller) ||
+             (targetTelecaller === 'unassigned' && !l.assigned_salesperson_id)
     );
   }
 
