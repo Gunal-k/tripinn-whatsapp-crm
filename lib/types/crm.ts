@@ -141,3 +141,47 @@ export interface LeadFilters {
   assignedTo?: string | 'ALL';
   showArchived?: boolean;
 }
+
+// ==============================================================================
+// EXPERIMENTAL WHATSAPP QR CONNECTION TYPES (BAILEYS)
+// ==============================================================================
+
+export type ExperimentalConnectionStatus = 
+  | 'disconnected' 
+  | 'connecting' 
+  | 'qr_ready' 
+  | 'connected' 
+  | 'failed';
+
+export interface ExperimentalWhatsAppSession {
+  id: string;
+  session_id: string;
+  phone_number?: string | null;
+  status: ExperimentalConnectionStatus;
+  qr_code?: string | null; // Data URL or raw string
+  paired_at?: string | null;
+  last_active_at?: string | null;
+  metadata?: {
+    platform?: string;
+    pushname?: string;
+    battery?: number;
+    wa_version?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExperimentalWhatsAppMessage {
+  id: string;
+  session_id: string;
+  provider_message_id: string;
+  direction: MessageDirection;
+  from_phone: string;
+  to_phone: string;
+  message_body: string;
+  message_type: 'text' | 'image' | 'document' | 'audio' | 'location' | 'unknown';
+  status: MessageStatus;
+  lead_id?: string | null;
+  raw_payload?: Record<string, unknown> | null;
+  created_at: string;
+}

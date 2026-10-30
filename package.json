@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --conditions=react-server --test tests/**/*.test.ts"
+    "test": "tsx --conditions=react-server --test tests/**/*.test.ts",
+    "qr:service": "tsx services/whatsapp-qr/src/server.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/analytics": "^2.0.1",
     "clsx": "^2.1.1",
     "flatpickr": "^4.6.13",
     "lucide-react": "^1.61.0",

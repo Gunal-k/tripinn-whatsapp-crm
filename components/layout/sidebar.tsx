@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Compass, 
@@ -13,11 +14,13 @@ import {
   PhoneCall,
   ShieldCheck,
   UserCheck,
+  BarChart3,
+  QrCode,
   X
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/theme-toggle';
 
-export type NavigationTab = 'dashboard' | 'leads' | 'follow-ups' | 'messages' | 'staff' | 'settings';
+export type NavigationTab = 'dashboard' | 'leads' | 'follow-ups' | 'messages' | 'staff' | 'settings' | 'website-analytics' | 'whatsapp-qr';
 
 interface SidebarProps {
   currentTab: NavigationTab;
@@ -72,6 +75,21 @@ export function Sidebar({
       icon: MessageSquare,
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+      adminOnly: false,
+    },
+    {
+      id: 'website-analytics' as NavigationTab,
+      label: 'Website Analytics',
+      icon: BarChart3,
+      badge: null,
+      adminOnly: false,
+    },
+    {
+      id: 'whatsapp-qr' as NavigationTab,
+      label: 'WhatsApp QR (Beta)',
+      icon: QrCode,
+      badge: 'BETA',
+      badgeColor: 'bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px]',
       adminOnly: false,
     },
     {

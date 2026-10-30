@@ -26,9 +26,14 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // 2. WhatsApp Webhook must remain accessible to Meta without user session cookie
-  // (Security is handled cryptographically via HMAC-SHA256 x-hub-signature-256 verification)
-  if (pathname === '/api/webhook/whatsapp') {
+  // 2. Public API webhooks and live website telemetry
+  // WhatsApp security is handled cryptographically via HMAC-SHA256 x-hub-signature-256
+  // Website analytics telemetry handles CORS and public telemetry from tripinn-demo.vercel.app
+  if (
+    pathname === '/api/webhook/whatsapp' ||
+    pathname.startsWith('/api/analytics/') ||
+    pathname.startsWith('/api/experimental/')
+  ) {
     return response;
   }
 

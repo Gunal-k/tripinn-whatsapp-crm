@@ -54,6 +54,14 @@ export function TopNav({
       title: 'Integrations & Cloud API Settings',
       subtitle: 'Supabase, WhatsApp Cloud API, and Meta Conversions API',
     },
+    'website-analytics': {
+      title: 'Website & Visitor Analytics',
+      subtitle: 'Real-time telemetry, page views, and WhatsApp conversion funnel',
+    },
+    'whatsapp-qr': {
+      title: 'Experimental WhatsApp QR (Beta)',
+      subtitle: 'Isolated multi-device Baileys connection for test numbers',
+    },
   };
 
   const currentInfo = titles[currentTab] || titles.dashboard;

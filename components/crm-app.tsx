@@ -11,6 +11,8 @@ import { FollowUpsView } from './follow-ups/follow-ups-view';
 import { MessagesView } from './messages/messages-view';
 import { SettingsView } from './settings/settings-view';
 import { StaffView } from './staff/staff-view';
+import { WebsiteAnalyticsView } from './analytics/website-analytics-view';
+import { ExperimentalQrCard } from './settings/experimental-qr-card';
 import { AddLeadModal } from './leads/add-lead-modal';
 import { AddStaffModal } from './staff/add-staff-modal';
 import { LeadDetailDialog } from './leads/lead-detail-dialog';
@@ -300,6 +302,16 @@ export default function CRMApp() {
               )}
 
               {currentTab === 'settings' && currentRole === 'admin' && <SettingsView />}
+
+              {currentTab === 'website-analytics' && (
+                <WebsiteAnalyticsView embedded={true} />
+              )}
+
+              {currentTab === 'whatsapp-qr' && (
+                <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+                  <ExperimentalQrCard standalone={true} />
+                </div>
+              )}
             </>
           )}
         </main>

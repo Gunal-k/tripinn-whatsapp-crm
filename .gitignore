@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# experimental whatsapp qr service
+/services/whatsapp-qr/sessions/
+/services/whatsapp-qr/node_modules/
+/services/whatsapp-qr/.env*
+!/services/whatsapp-qr/.env.example

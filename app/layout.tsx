@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { lightModeStyles } from "../lib/theme/styles";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-[#070d1a] text-slate-100 flex flex-col font-sans transition-colors duration-150">
         {children}
+        <Analytics />
       </body>
     </html>
   );
